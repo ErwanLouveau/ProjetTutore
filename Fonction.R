@@ -66,6 +66,7 @@ acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time=
   }
 }
 
+# Paramètres = (data, var si sparse et argument si dense, type, temporalite)
 acpf_serchol <- acpf(pbc2, "serChol", type="sparse", time="year")
 acpf_albumin <- acpf(pbc2, "albumin", type="sparse", time="year")
 acpf_cw_temperature <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
