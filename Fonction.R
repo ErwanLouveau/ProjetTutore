@@ -31,7 +31,7 @@ acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time=
     data_Lt <- lapply(data_list, function(.x) return(.x[[time]]))
     
     acpf_ <- FPCA(data_Ly, data_Lt, list(dataType = "Sparse", FVEthreshold = threshold))
-    return(acpf_)
+    return(list(acpf = acpf_, data_obs = data_Ly, time = data_Lt))
   }
   
   acpf_dense_list <- function(data, donnees, variable, threshold = 0.99, uniteTemps = "jour", format_date = "%b %d", type_location = "ville"){
@@ -54,7 +54,7 @@ acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time=
     
     acpf_ <- FPCA(Ly_temp, Lt_temp, list(dataType = "Dense", FVEthreshold = threshold))
     
-    return(acpf_)
+    return(list(acpf = acpf_, data_obs = data_Ly, time = data_Lt))
   }
   
   if (type == "sparse") {
@@ -66,9 +66,8 @@ acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time=
   }
 }
 
-acpf_serchol <- acpf(pbc2, "serChol", type="sparse", time="time")
-acpf_albumin <- acpf(pbc2, "albumin", type="sparse", time="time")
+acpf_serchol <- acpf(pbc2, "serChol", type="sparse", time="year")
+acpf_albumin <- acpf(pbc2, "albumin", type="sparse", time="year")
 acpf_cw_temperature <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
 
 fpca_log10prec <- acpf(CanadianWeather, donnees = "dailyAv", variable = "log10precip", type="denseList")
-#com
