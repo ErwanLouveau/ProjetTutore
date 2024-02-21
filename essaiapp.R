@@ -1,6 +1,6 @@
 library(tidyverse)
 
-
+#test
 
 #1
 Sys.setlocale("LC_TIME", "en_US.UTF-8")
@@ -82,7 +82,19 @@ ui <- fluidPage(
       checkboxGroupInput("ville", 
                          label = "Choisissez les villes que vous voulez observer",
                          choices = CanadianWeather$place,
-                         selected = "St. Johns")
+                         selected = c("St. Johns","Halifax","Sydney","Yarmouth","Charlottvl","Fredericton","Scheffervll",
+                                      "Arvida","Bagottville","Quebec","Sherbrooke","Montreal","Ottawa","London","Toronto",
+                                      "Thunder Bay")),
+      radioButtons("choix", h3("Radio buttons"),choices = list("Nombre de CP :" = 1, "PVE" = 2),selected = 2),
+      
+      conditionalPanel(
+        condition = "input.choix == 1",
+        numericInput("nbCP",label="Nombre de CP :", value = 3, min = 1, max = 6)
+      ),
+      conditionalPanel(
+        condition = "input.choix == 2",
+        numericInput("PVE",label=" % de variances expliqué :", value = 99, min =50 , max = 100)
+      )
     ),
     
     mainPanel(fluidRow(
@@ -90,10 +102,7 @@ ui <- fluidPage(
                 column(6, plotOutput("plot_mu"))
                       ),
               fluidRow(
-                column(4, plotOutput("phi1")),
-                column(4, plotOutput("phi2")),
-                column(4, plotOutput("phi3"))
-                      )
+                column(6, plotOutput("phi")))
               )
   )
 )
@@ -108,7 +117,7 @@ server <- function(input, output) {
                       "log10precip"= log10prec_pivoter 
     )
     tableau_ville <- filter(tableau, tableau$ville %in% input$ville)
-    ggplot(tableau_ville, aes(x=tableau_ville$jour ,y=tableau_ville$value, group =tableau_ville$ville, color = tableau_ville$ville)) +
+    ggplot(tableau_ville, aes(x=tableau_ville$jour ,y=tableau_ville$value, group=tableau_ville$ville, color = tableau_ville$ville)) +
       geom_line() + 
       labs(title = paste("Diagramme représentant la", input$var, "dans différentes provinces"),
            x = "Jours",
@@ -126,30 +135,45 @@ server <- function(input, output) {
 
     plot(acpf$mu,type="l", xlab="nombre de jours", ylab=input$var, main=" fonction mu de l'ACPF")
   })
-  output$phi1<- renderPlot({
-    acpf <- switch(input$var, 
-                   "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense")),
-                   "Temperature" = FPCA(Ly_temp[input$ville], Lt_temp[input$ville], list(dataType = "Dense")),
-                   "log10precip"= FPCA(Ly_log10prec[input$ville], Lt_log10prec[input$ville], list(dataType = "Dense"))
-    )
-    plot(acpf$phi[,1],type="l", xlab="nombre de jours", ylab= paste("Variation de la ", input$var), main="première composante principale")
+  output$phi<- renderPlot({
+    acpf_cp <- switch(input$var, 
+                   "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense",FVEthreshold=1)),
+                   "Temperature" = FPCA(Ly_temp[input$ville], Lt_temp[input$ville], list(dataType = "Dense",FVEthreshold=1)),
+                   "log10precip"= FPCA(Ly_log10prec[input$ville], Lt_log10prec[input$ville], list(dataType = "Dense",FVEthreshold=1)))
+    if (input$choix==1){
+      phi <- as.data.frame(acpf_cp$phi)
+      phi <- cbind("jour"=1:365,phi)
+      phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:(input$nbCP+1)], names_to = "CP")
+      ggplot(phi_pivoter, aes(x=phi_pivoter$jour ,y=phi_pivoter$value, group=phi_pivoter$CP, color = phi_pivoter$CP)) +
+        geom_line() + 
+        labs(title = paste("Diagramme représentant les composantes principales"),
+             x = "Jours",
+             y = paste("Variation de la ", input$var),
+             color="CP") +
+        ylim(min(phi),max(phi[-1]))+
+        theme_bw()
+    }
+    
+    else if (input$choix==2){
+      acpf_pve <- switch(input$var, 
+                     "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense",FVEthreshold =input$PVE/100)),
+                     "Temperature" = FPCA(Ly_temp[input$ville], Lt_temp[input$ville], list(dataType = "Dense",FVEthreshold =input$PVE/100)),
+                     "log10precip"= FPCA(Ly_log10prec[input$ville], Lt_log10prec[input$ville], list(dataType = "Dense",FVEthreshold =input$PVE/100)))
+      phi <- as.data.frame(acpf_pve$phi)
+      phi <- cbind("jour"=1:365,phi)
+      phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:ncol(phi)], names_to = "CP")
+      ggplot(phi_pivoter, aes(x=phi_pivoter$jour ,y=phi_pivoter$value, group=phi_pivoter$CP, color = phi_pivoter$CP)) +
+       geom_line() + 
+        labs(title = paste("Diagramme représentant les composantes principales"),
+            x = "Jours",
+            y = paste("Variation de la ", input$var),
+             color="CP") +
+        ylim(min(acpf_cp$phi),max(acpf_cp$phi[-1]))+
+           theme_bw()
+    }
+ 
   })
-  output$phi2<- renderPlot({
-    acpf <- switch(input$var, 
-                   "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense")),
-                   "Temperature" = FPCA(Ly_temp[input$ville], Lt_temp[input$ville], list(dataType = "Dense")),
-                   "log10precip"= FPCA(Ly_log10prec[input$ville], Lt_log10prec[input$ville], list(dataType = "Dense"))
-    )
-    plot(acpf$phi[,2],type="l", xlab="nombre de jours", ylab= paste("Variation de la ", input$var), main="deuxième composante principale")
-  })
-  output$phi3<- renderPlot({
-    acpf <- switch(input$var, 
-                   "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense")),
-                   "Temperature" = FPCA(Ly_temp[input$ville], Lt_temp[input$ville], list(dataType = "Dense")),
-                   "log10precip"= FPCA(Ly_log10prec[input$ville], Lt_log10prec[input$ville], list(dataType = "Dense"))
-    )
-    plot(acpf$phi[,3],type="l", xlab="nombre de jours", ylab= paste("Variation de la ", input$var), main="troisième composante principale")
-  })
+ 
   
   
   
