@@ -1,70 +1,78 @@
-library(tidyverse)
-
-
-
-#1
+# setup ================================================================
 Sys.setlocale("LC_TIME", "en_US.UTF-8")
 library(fda)
 library(fdapace)
-
-#donnes temperature
-data(CanadianWeather,package = "fda")
-temperature <- as.data.frame(CanadianWeather$dailyAv[, , "Temperature.C"])
-temperature <- cbind("jour" = rownames(temperature),temperature)
-temperature_pivoter<- pivot_longer(temperature, cols = colnames(temperature)[2:36], names_to = "ville")
-temperature_pivoter$jour <- as.Date(temperature_pivoter$jour, format = "%b%d")
-
-# temperature acpf
-temperature_pivoter$jour <- as.numeric(temperature_pivoter$jour) # transformer date en jour
-temperature_pivoter <- temperature_pivoter %>% 
-  mutate(jour=jour-19723)
-list_temp <- split(temperature_pivoter, temperature_pivoter$ville) #créer une liste de data frame pour chaque ville
-Ly_temp <- lapply(list_temp, function(x) return(x$value)) #le même data frame avec juste la colonne temperature
-Lt_temp <- lapply(list_temp, function(x) return(x$jour)) 
-
-#donnes precipitation
-precipitation <- as.data.frame(CanadianWeather$dailyAv[, , "Precipitation.mm"])
-precipitation <- cbind("jour" = rownames(precipitation), precipitation)
-precipitation_pivoter<- pivot_longer(precipitation, cols = colnames(precipitation)[2:36], names_to = "ville")
-precipitation_pivoter$jour <- as.Date(precipitation_pivoter$jour, format = "%b%d")
-
-# precipitation acpf
-precipitation_pivoter$jour <- as.numeric(precipitation_pivoter$jour) # transformer date en jour
-precipitation_pivoter <- precipitation_pivoter %>% 
-  mutate(jour=jour-19723)
-list_prec <- split(precipitation_pivoter, precipitation_pivoter$ville) #créer une liste de data frame pour chaque ville
-Ly_prec <- lapply(list_prec, function(x) return(x$value)) #le même data frame avec juste la colonne temperature
-Lt_prec <- lapply(list_prec, function(x) return(x$jour)) 
-
-
-#donnes log10prec
-log10prec <- as.data.frame(CanadianWeather$dailyAv[, , "log10precip"])
-log10prec <- cbind("jour" = rownames(log10prec),log10prec)
-log10prec_pivoter<- pivot_longer(log10prec, cols = colnames(log10prec)[2:36], names_to = "ville")
-log10prec_pivoter$jour <- as.Date(log10prec_pivoter$jour, format = "%b%d")
-
-# precipitation acpf
-log10prec_pivoter$jour <- as.numeric(log10prec_pivoter$jour) # transformer date en jour
-log10prec_pivoter <- log10prec_pivoter %>% 
-  mutate(jour=jour-19723)
-list_log10prec <- split(log10prec_pivoter, log10prec_pivoter$ville) #créer une liste de data frame pour chaque ville
-Ly_log10prec <- lapply(list_log10prec, function(x) return(x$value)) #le même data frame avec juste la colonne temperature
-Lt_log10prec <- lapply(list_log10prec, function(x) return(x$jour)) 
-
-
-
-#2
+library(tidyverse)
+library(DynForest)
 library(JM)
-data(package="JM")
-pbc2
 
-#3
-jd3 <- read.csv("C:/Users/Utilisateur/Downloads/test_measure.csv")
-jd3
-#données denses (plusieurs par minutes messures environ toute les deux secondes)
-#données irrégulière les sujets prennent des messures à tes temps différents.
-#erreur le fichier ne semble pas avoir de bruit
-#les mesures VO2, VCO2 et VE sont manquantes pour 30 tests = données manquantes
+# load data ================================================================
+data("pbc2")
+pbc2 <- pbc2 %>% arrange(id)
+data("CanadianWeather")
+
+# acpf function ================================================================
+acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time="time", obs_min = 2, uniteTemps = "jour", format_date = "%b %d", type_location = "ville") {
+  
+  acpf_sparse <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 0.99){
+    if (!is.data.frame(data)){
+      stop("Le dataframe n'existe pas, est vide, ou n'est pas un dataframe.")
+    }
+    if (!(variable %in% colnames(data))){
+      stop("La variable spécifiée n'existe pas dans le dataframe.")
+    }
+    
+    data <- data %>% filter(!is.na(.data[[variable]]))
+    
+    at_least <- unlist(data %>% group_by(.data[[id]]) %>% group_map(~sum(!is.na(.x[[variable]]))>=obs_min))
+    data_var <- data %>% filter(.data[[id]] %in% sort(unique(data$id))[at_least])
+    
+    data_list <- split(data_var, f = data_var$id)
+    data_Ly <- lapply(data_list, function(.x) return(.x[[variable]]))
+    data_Lt <- lapply(data_list, function(.x) return(.x[[time]]))
+    
+    acpf_ <- FPCA(data_Ly, data_Lt, list(dataType = "Sparse", FVEthreshold = threshold))
+    return(list(acpf = acpf_, data_obs = data_Ly, time = data_Lt))
+  }
+  
+  acpf_dense_list <- function(data, donnees, variable, threshold = 0.99, uniteTemps = "jour", format_date = "%b %d", type_location = "ville"){
+    temp <- as.data.frame(CanadianWeather[[donnees]][, , variable])
+    
+    colname <- uniteTemps
+    temp <- dplyr::mutate(temp, !!colname := rownames(temp)) %>% relocate(last_col(), .before  = 1)
+    
+    names_rows <- type_location
+    temp_pivot <- pivot_longer(temp, cols = colnames(temp)[2:ncol(temp)], names_to = names_rows)
+    
+    Sys.setlocale("LC_TIME", "C")
+    temp_pivot <- mutate(temp_pivot, !!uniteTemps := as.Date(temp_pivot[[uniteTemps]], format = format_date))
+    temp_pivot <- mutate(temp_pivot, !!uniteTemps := as.numeric(temp_pivot[[uniteTemps]])) 
+    temp_pivot <- mutate(temp_pivot, !!uniteTemps := temp_pivot[[uniteTemps]] - min(temp_pivot[[uniteTemps]]))
+    
+    list_temp <- split(temp_pivot, temp_pivot[[type_location]])
+    Ly_temp <- lapply(list_temp, function(.x) return(.x[["value"]]))
+    Lt_temp <- lapply(list_temp, function(.x) return(.x[[uniteTemps]]))
+    
+    acpf_ <- FPCA(Ly_temp, Lt_temp, list(dataType = "Dense", FVEthreshold = threshold))
+    
+    return(list(acpf = acpf_, data_obs = Ly_temp, time = Lt_temp))
+  }
+  
+  if (type == "sparse") {
+    return(acpf_sparse(data, variable, id, time, obs_min, threshold))
+  } else if (type == "denseList") {
+    return(acpf_dense_list(data, donnees, variable, threshold, uniteTemps, format_date, type_location))
+  } else {
+    stop("Type non pris en charge.")
+  }
+}
+
+
+# function application =========================================================
+acpf_cw_temperature <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
+acpf_cw_precipitationmm <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Precipitation.mm", type="denseList")
+acpf_cw_log10prec <- acpf(CanadianWeather, donnees = "dailyAv", variable = "log10precip", type="denseList")
+
 
 # User interface ----
 ui <- fluidPage(
@@ -74,27 +82,33 @@ ui <- fluidPage(
       helpText("Météo Canadienne par jour et par Etat"),
       
       selectInput("var", 
-                  label = "Choisi la variable métérologique à observer",
-                  choices = c("Précipitation", "",
-                              "Temperature", "log10precip"),
+                  label = "Variable métérologique à observer",
+                  choices = c("Précipitation", "Temperature", "log10precip"),
                   selected = "Temperature"),
       
       checkboxGroupInput("ville", 
-                         label = "Choisissez les villes que vous voulez observer",
-                         choices = CanadianWeather$place,
-                         selected = "St. Johns")
+                         label = "Villes à observer",
+                         choices = sort(CanadianWeather$place),
+                         selected = c("Arvida")),
+      radioButtons("choix", h3("Radio buttons"),choices = list("Nombre de CP :" = 1, "PVE" = 2),selected = 2),
+      
+      conditionalPanel(
+        condition = "input.choix == 1",
+        numericInput("nbCP",label="Nombre de CP :", value = 3, min = 1, max = 6)
+      ),
+      conditionalPanel(
+        condition = "input.choix == 2",
+        numericInput("PVE",label=" % de variances expliqué :", value = 99, min =50 , max = 100)
+      )
     ),
     
     mainPanel(fluidRow(
-                column(6, plotOutput("plot_spag")),
-                column(6, plotOutput("plot_mu"))
-                      ),
-              fluidRow(
-                column(4, plotOutput("phi1")),
-                column(4, plotOutput("phi2")),
-                column(4, plotOutput("phi3"))
-                      )
-              )
+      column(6, plotOutput("plot_spag")),
+      column(6, plotOutput("plot_mu"))
+    ),
+    fluidRow(
+      column(6, plotOutput("phi")))
+    )
   )
 )
 
@@ -108,7 +122,7 @@ server <- function(input, output) {
                       "log10precip"= log10prec_pivoter 
     )
     tableau_ville <- filter(tableau, tableau$ville %in% input$ville)
-    ggplot(tableau_ville, aes(x=tableau_ville$jour ,y=tableau_ville$value, group =tableau_ville$ville, color = tableau_ville$ville)) +
+    ggplot(tableau_ville, aes(x=tableau_ville$jour ,y=tableau_ville$value, group=tableau_ville$ville, color = tableau_ville$ville)) +
       geom_line() + 
       labs(title = paste("Diagramme représentant la", input$var, "dans différentes provinces"),
            x = "Jours",
@@ -117,39 +131,54 @@ server <- function(input, output) {
       theme_bw()
     
   })
-  output$plot_mu<- renderPlot({
-    acpf <- switch(input$var, 
-                      "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense")),
-                      "Temperature" = FPCA(Ly_temp[input$ville], Lt_temp[input$ville], list(dataType = "Dense")),
-                      "log10precip"= FPCA(Ly_log10prec[input$ville], Lt_log10prec[input$ville], list(dataType = "Dense"))
-    )
-
-    plot(acpf$mu,type="l", xlab="nombre de jours", ylab=input$var, main=" fonction mu de l'ACPF")
-  })
-  output$phi1<- renderPlot({
-    acpf <- switch(input$var, 
-                   "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense")),
-                   "Temperature" = FPCA(Ly_temp[input$ville], Lt_temp[input$ville], list(dataType = "Dense")),
-                   "log10precip"= FPCA(Ly_log10prec[input$ville], Lt_log10prec[input$ville], list(dataType = "Dense"))
-    )
-    plot(acpf$phi[,1],type="l", xlab="nombre de jours", ylab= paste("Variation de la ", input$var), main="première composante principale")
-  })
-  output$phi2<- renderPlot({
-    acpf <- switch(input$var, 
-                   "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense")),
-                   "Temperature" = FPCA(Ly_temp[input$ville], Lt_temp[input$ville], list(dataType = "Dense")),
-                   "log10precip"= FPCA(Ly_log10prec[input$ville], Lt_log10prec[input$ville], list(dataType = "Dense"))
-    )
-    plot(acpf$phi[,2],type="l", xlab="nombre de jours", ylab= paste("Variation de la ", input$var), main="deuxième composante principale")
-  })
-  output$phi3<- renderPlot({
-    acpf <- switch(input$var, 
-                   "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense")),
-                   "Temperature" = FPCA(Ly_temp[input$ville], Lt_temp[input$ville], list(dataType = "Dense")),
-                   "log10precip"= FPCA(Ly_log10prec[input$ville], Lt_log10prec[input$ville], list(dataType = "Dense"))
-    )
-    plot(acpf$phi[,3],type="l", xlab="nombre de jours", ylab= paste("Variation de la ", input$var), main="troisième composante principale")
-  })
+  # output$plot_mu<- renderPlot({
+  #   acpf <- switch(input$var, 
+  #                  "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense")),
+  #                  "Temperature" = FPCA(Ly_temp[input$ville], Lt_temp[input$ville], list(dataType = "Dense")),
+  #                  "log10precip"= FPCA(Ly_log10prec[input$ville], Lt_log10prec[input$ville], list(dataType = "Dense"))
+  #   )
+  #   
+  #   plot(acpf$mu,type="l", xlab="nombre de jours", ylab=input$var, main=" fonction mu de l'ACPF")
+  # })
+  # output$phi<- renderPlot({
+  #   acpf_cp <- switch(input$var, 
+  #                     "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense",FVEthreshold=1)),
+  #                     "Temperature" = FPCA(Ly_temp[input$ville], Lt_temp[input$ville], list(dataType = "Dense",FVEthreshold=1)),
+  #                     "log10precip"= FPCA(Ly_log10prec[input$ville], Lt_log10prec[input$ville], list(dataType = "Dense",FVEthreshold=1)))
+  #   if (input$choix==1){
+  #     phi <- as.data.frame(acpf_cp$phi)
+  #     phi <- cbind("jour"=1:365,phi)
+  #     phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:(input$nbCP+1)], names_to = "CP")
+  #     ggplot(phi_pivoter, aes(x=phi_pivoter$jour ,y=phi_pivoter$value, group=phi_pivoter$CP, color = phi_pivoter$CP)) +
+  #       geom_line() + 
+  #       labs(title = paste("Diagramme représentant les composantes principales"),
+  #            x = "Jours",
+  #            y = paste("Variation de la ", input$var),
+  #            color="CP") +
+  #       ylim(min(phi),max(phi[-1]))+
+  #       theme_bw()
+  #   }
+  #   
+  #   else if (input$choix==2){
+  #     acpf_pve <- switch(input$var, 
+  #                        "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense",FVEthreshold =input$PVE/100)),
+  #                        "Temperature" = FPCA(Ly_temp[input$ville], Lt_temp[input$ville], list(dataType = "Dense",FVEthreshold =input$PVE/100)),
+  #                        "log10precip"= FPCA(Ly_log10prec[input$ville], Lt_log10prec[input$ville], list(dataType = "Dense",FVEthreshold =input$PVE/100)))
+  #     phi <- as.data.frame(acpf_pve$phi)
+  #     phi <- cbind("jour"=1:365,phi)
+  #     phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:ncol(phi)], names_to = "CP")
+  #     ggplot(phi_pivoter, aes(x=phi_pivoter$jour ,y=phi_pivoter$value, group=phi_pivoter$CP, color = phi_pivoter$CP)) +
+  #       geom_line() + 
+  #       labs(title = paste("Diagramme représentant les composantes principales"),
+  #            x = "Jours",
+  #            y = paste("Variation de la ", input$var),
+  #            color="CP") +
+  #       ylim(min(acpf_cp$phi),max(acpf_cp$phi[-1]))+
+  #       theme_bw()
+  #   }
+    
+  # })
+  
   
   
   
@@ -157,9 +186,3 @@ server <- function(input, output) {
 
 # Run app ----
 shinyApp(ui, server)
-
-
-#pouvoir mettre axe y selon les variable choisi
-# voir les différent thème
-#changer geom_lines en geom_smooth()
-#tester le graph avec les uatres jeu de données

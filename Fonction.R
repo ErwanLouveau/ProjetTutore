@@ -1,5 +1,3 @@
-# parametres : data, variable, sparse, threshold, observation_min
-
 # load packages ================================================================
 library(tidyverse)
 library(DynForest)
@@ -7,10 +5,12 @@ library(fdapace)
 library(JM)
 library(fda)
 
+# load data ================================================================
 data("pbc2")
 pbc2 <- pbc2 %>% arrange(id)
 data("CanadianWeather")
 
+# acpf function ================================================================
 acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time="time", obs_min = 2, uniteTemps = "jour", format_date = "%b %d", type_location = "ville") {
   
   acpf_sparse <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 0.99){
@@ -66,6 +66,7 @@ acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time=
   }
 }
 
+# function application =========================================================
 acpf_serchol <- acpf(pbc2, "serChol", type="sparse", time="year")
 acpf_albumin <- acpf(pbc2, "albumin", type="sparse", time="year")
 acpf_cw_temperature <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
