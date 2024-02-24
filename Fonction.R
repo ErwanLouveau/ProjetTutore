@@ -54,7 +54,7 @@ acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time=
     
     acpf_ <- FPCA(Ly_temp, Lt_temp, list(dataType = "Dense", FVEthreshold = threshold))
     
-    return(list(acpf = acpf_, data_obs = data_Ly, time = data_Lt))
+    return(list(acpf = acpf_, data_obs = Ly_temp, time = Lt_temp))
   }
   
   if (type == "sparse") {
