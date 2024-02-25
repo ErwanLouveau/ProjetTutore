@@ -1,0 +1,19 @@
+output$plot_xiest<- renderPlot({
+    data_mu <- reorder_cw(input$ville)
+    acpf_cw_temperature <- acpf(data_mu, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
+    acpf_cw_precipitationmm <- acpf(data_mu, donnees = "dailyAv", variable = "Precipitation.mm", type="denseList")
+    acpf_cw_log10prec <- acpf(data_mu, donnees = "dailyAv", variable = "log10precip", type="denseList")
+    # calcul des valeurs estimées des composantes + données observées
+    acpf <- switch(input$var,
+                   "Précipitation" = list(y_est = acpf_cw_precipitationmm$acpf$mu + (acpf_cw_precipitationmm$acpf$xiEst %*% t(acpf_cw_precipitationmm$acpf$phi)),
+                                          obs = data.frame(time=1:365,acpf_cw_precipitationmm$data_obs)),
+                   "Temperature" = list(y_est = acpf_cw_temperature$acpf$mu + (acpf_cw_temperature$acpf$xiEst %*% t(acpf_cw_temperature$acpf$phi)),
+                                        obs = data.frame(time=1:365,acpf_cw_temperature$data_obs)),
+                   "log10precip"= list(y_est = acpf_cw_log10prec$acpf$mu + (acpf_cw_log10prec$acpf$xiEst %*% t(acpf_cw_log10prec$acpf$phi)),
+                                       obs = data.frame(time=1:365,acpf_cw_log10prec$data_obs))
+    )
+    plot(acpf$y_est[1,], type = "l", xlab = "Time", ylab = "Y_est", main="Valeurs estimées de la première composante")
+    for (i in 2:ncol(acpf$obs)) {
+      lines(acpf$obs$time, acpf$obs[, i], col = i - 1)
+    }
+  })
