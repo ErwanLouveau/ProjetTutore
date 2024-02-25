@@ -35,7 +35,7 @@ acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time=
   }
   
   acpf_dense_list <- function(data, donnees, variable, threshold = 0.99, uniteTemps = "jour", format_date = "%b %d", type_location = "ville"){
-    temp <- as.data.frame(CanadianWeather[[donnees]][, , variable])
+    temp <- as.data.frame(data[[donnees]][, , variable])
     
     colname <- uniteTemps
     temp <- dplyr::mutate(temp, !!colname := rownames(temp)) %>% relocate(last_col(), .before  = 1)
@@ -54,7 +54,7 @@ acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time=
     
     acpf_ <- FPCA(Ly_temp, Lt_temp, list(dataType = "Dense", FVEthreshold = threshold))
     
-    return(list(acpf = acpf_, data_obs = Ly_temp, time = Lt_temp))
+    return(list(acpf = acpf_, data_obs = Ly_temp, time = Lt_temp, data_pivot = temp_pivot))
   }
   
   if (type == "sparse") {
@@ -71,3 +71,59 @@ acpf_serchol <- acpf(pbc2, "serChol", type="sparse", time="year")
 acpf_albumin <- acpf(pbc2, "albumin", type="sparse", time="year")
 acpf_cw_temperature <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
 fpca_log10prec <- acpf(CanadianWeather, donnees = "dailyAv", variable = "log10precip", type="denseList")
+
+
+# function to reorder CanadianWeather ==========================================
+reorder_cw <- function(villes){
+  #recreer les matrices de canadian weather avec uniquements les villes entrées en paramètres
+  df_dailyAv <- as.data.frame(as.table(CanadianWeather$dailyAv))
+  df_dailyAv <- df_dailyAv %>% filter(Var2 %in% villes)
+  df_place <- villes
+  df_province <- data.frame(ville = names(CanadianWeather$province),
+                            province = CanadianWeather$province)
+  rownames(df_province) <- 1:nrow(df_province)
+  df_province <- df_province %>% filter(ville %in% villes)
+  df_coordinates <- as.data.frame(as.table(CanadianWeather$coordinates))
+  df_coordinates <- df_coordinates %>% filter(Var1 %in% villes)
+  df_region <- data.frame(ville = names(CanadianWeather$region),
+                          region = CanadianWeather$region)
+  rownames(df_region) <- 1:nrow(df_region)
+  df_region <- df_region %>% filter(ville %in% villes)
+  df_monthlyTemp <- as.data.frame(as.table(CanadianWeather$monthlyTemp))
+  df_monthlyTemp <- df_monthlyTemp %>% filter(Var2 %in% villes)
+  df_monthlyPrecip <- as.data.frame(as.table(CanadianWeather$monthlyPrecip))
+  df_monthlyPrecip <- df_monthlyPrecip %>% filter(Var2 %in% villes)
+  df_geogindex <- data.frame(ville = names(CanadianWeather$geogindex),
+                             geogindex = CanadianWeather$geogindex)
+  rownames(df_geogindex) <- 1:nrow(df_geogindex)
+  df_geogindex <- df_geogindex %>% filter(ville %in% villes)
+  
+  # reformer le dataframe
+  cw <- list(
+    dailyAv = array(df_dailyAv$Freq, dim = c(365, length(villes), 3),
+                    dimnames = list(as.character(unique(df_dailyAv$Var1)), 
+                                    as.character(unique(df_dailyAv$Var2)), 
+                                    as.character(unique(df_dailyAv$Var3)))),
+    place = df_place,
+    province = setNames(df_province$province, villes),
+    coordinates = array(df_coordinates$Freq, dim = c(length(villes), 2),
+                        dimnames = list(as.character(unique(df_coordinates$Var1)), 
+                                        as.character(unique(df_coordinates$Var2)))),
+    region = setNames(df_region$region, villes),
+    monthlyTemp = array(df_monthlyTemp$Freq, dim = c(12, length(villes)),
+                        dimnames = list(as.character(unique(df_monthlyTemp$Var1)), 
+                                        as.character(unique(df_monthlyTemp$Var2)))),
+    monthlyPrecip = array(df_monthlyPrecip$Freq, dim = c(12, length(villes)),
+                          dimnames = list(as.character(unique(df_monthlyPrecip$Var1)), 
+                                          as.character(unique(df_monthlyPrecip$Var2)))),
+    geogindex = setNames(df_geogindex$geogindex, villes)
+  )
+  
+  return(cw)
+}
+
+# function application =========================================================
+villes <- c("St. Johns", "Halifax", "Sydney", "Yarmouth")
+cw <- reorder_cw(villes)
+str(cw)
+acpf_cw_temperature <- acpf(cw, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
