@@ -1,4 +1,4 @@
-# setup ================================================================
+# setup ========================================================================
 Sys.setlocale("LC_TIME", "en_US.UTF-8")
 library(fda)
 library(fdapace)
@@ -6,7 +6,7 @@ library(tidyverse)
 library(DynForest)
 library(JM)
 
-# load data ================================================================
+# load data ====================================================================
 data("pbc2")
 pbc2 <- pbc2 %>% arrange(id)
 data("CanadianWeather")
@@ -36,7 +36,7 @@ acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time=
   }
   
   acpf_dense_list <- function(data, donnees, variable, threshold = 0.99, uniteTemps = "jour", format_date = "%b %d", type_location = "ville"){
-    temp <- as.data.frame(CanadianWeather[[donnees]][, , variable])
+    temp <- as.data.frame(data[[donnees]][, , variable])
     
     colname <- uniteTemps
     temp <- dplyr::mutate(temp, !!colname := rownames(temp)) %>% relocate(last_col(), .before  = 1)
@@ -55,7 +55,7 @@ acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time=
     
     acpf_ <- FPCA(Ly_temp, Lt_temp, list(dataType = "Dense", FVEthreshold = threshold))
     
-    return(list(acpf = acpf_, data_obs = Ly_temp, time = Lt_temp))
+    return(list(acpf = acpf_, data_obs = Ly_temp, time = Lt_temp, data_pivot = temp_pivot))
   }
   
   if (type == "sparse") {
@@ -68,10 +68,13 @@ acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time=
 }
 
 
+
 # function application =========================================================
-acpf_cw_temperature <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
-acpf_cw_precipitationmm <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Precipitation.mm", type="denseList")
-acpf_cw_log10prec <- acpf(CanadianWeather, donnees = "dailyAv", variable = "log10precip", type="denseList")
+# acpf_cw_temperature <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
+# acpf_cw_precipitationmm <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Precipitation.mm", type="denseList")
+# acpf_cw_log10prec <- acpf(CanadianWeather, donnees = "dailyAv", variable = "log10precip", type="denseList")
+
+# Paramètre de l'application ===================================================
 
 
 # User interface ----
@@ -107,19 +110,23 @@ ui <- fluidPage(
       column(6, plotOutput("plot_mu"))
     ),
     fluidRow(
-      column(6, plotOutput("phi")))
+      column(6, plotOutput("plot_xiest")))
     )
   )
 )
 
 # Server logic ----
 server <- function(input, output) {
+  acpf_cw_temperature <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
+  acpf_cw_precipitationmm <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Precipitation.mm", type="denseList")
+  acpf_cw_log10prec <- acpf(CanadianWeather, donnees = "dailyAv", variable = "log10precip", type="denseList")
+  
   # Créer le diagramme spaghetti avec ggplot2
   output$plot_spag<- renderPlot({
     tableau <- switch(input$var, 
-                      "Précipitation" = precipitation_pivoter,
-                      "Temperature" = temperature_pivoter,
-                      "log10precip"= log10prec_pivoter 
+                      "Précipitation" = acpf_cw_precipitationmm$data_pivot,
+                      "Temperature" = acpf_cw_temperature$data_pivot,
+                      "log10precip"= acpf_cw_log10prec$data_pivot
     )
     tableau_ville <- filter(tableau, tableau$ville %in% input$ville)
     ggplot(tableau_ville, aes(x=tableau_ville$jour ,y=tableau_ville$value, group=tableau_ville$ville, color = tableau_ville$ville)) +
@@ -131,15 +138,39 @@ server <- function(input, output) {
       theme_bw()
     
   })
-  # output$plot_mu<- renderPlot({
-  #   acpf <- switch(input$var, 
-  #                  "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense")),
-  #                  "Temperature" = FPCA(Ly_temp[input$ville], Lt_temp[input$ville], list(dataType = "Dense")),
-  #                  "log10precip"= FPCA(Ly_log10prec[input$ville], Lt_log10prec[input$ville], list(dataType = "Dense"))
-  #   )
-  #   
-  #   plot(acpf$mu,type="l", xlab="nombre de jours", ylab=input$var, main=" fonction mu de l'ACPF")
-  # })
+  output$plot_mu<- renderPlot({
+    data_mu <- reorder_cw(input$ville)
+    acpf_cw_temperature <- acpf(data_mu, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
+    acpf_cw_precipitationmm <- acpf(data_mu, donnees = "dailyAv", variable = "Precipitation.mm", type="denseList")
+    acpf_cw_log10prec <- acpf(data_mu, donnees = "dailyAv", variable = "log10precip", type="denseList")
+
+    acpf <- switch(input$var,
+                   "Précipitation" = acpf_cw_temperature$acpf$mu,
+                   "Temperature" = acpf_cw_precipitationmm$acpf$mu,
+                   "log10precip"= acpf_cw_log10prec$acpf$mu
+    )
+
+    plot(acpf,type="l", xlab="nombre de jours", ylab=input$var, main=" fonction mu de l'ACPF")
+  })
+  output$plot_xiest<- renderPlot({
+    data_mu <- reorder_cw(input$ville)
+    acpf_cw_temperature_xiest <- acpf(data_mu, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
+    acpf_cw_precipitationmm_xiest <- acpf(data_mu, donnees = "dailyAv", variable = "Precipitation.mm", type="denseList")
+    acpf_cw_log10prec_xiest <- acpf(data_mu, donnees = "dailyAv", variable = "log10precip", type="denseList")
+    # calcul des valeurs estimées des composantes + données observées
+    acpf <- switch(input$var,
+                   "Précipitation" = list(y_est = acpf_cw_precipitationmm$acpf$mu + (acpf_cw_precipitationmm$acpf$xiEst %*% t(acpf_cw_precipitationmm$acpf$phi)),
+                                          obs = data.frame(time=1:365,acpf_cw_precipitationmm_xiest$data_obs)),
+                   "Temperature" = list(y_est = acpf_cw_temperature$acpf$mu + (acpf_cw_temperature$acpf$xiEst %*% t(acpf_cw_temperature$acpf$phi)),
+                                        obs = data.frame(time=1:365,acpf_cw_temperature_xiest$data_obs)),
+                   "log10precip"= list(y_est = acpf_cw_log10prec$acpf$mu + (acpf_cw_log10prec$acpf$xiEst %*% t(acpf_cw_log10prec$acpf$phi)),
+                                       obs = data.frame(time=1:365,acpf_cw_log10prec_xiest$data_obs))
+    )
+    plot(acpf$y_est[1,], type = "l", xlab = "Time", ylab = "Y_est", main="Valeurs estimées de la première composante avec toutes les villes")
+    for (i in 2:ncol(acpf$obs)) {
+      lines(acpf$obs$time, acpf$obs[, i], col = i - 1)
+    }
+  })
   # output$phi<- renderPlot({
   #   acpf_cp <- switch(input$var, 
   #                     "Précipitation" = FPCA(Ly_prec[input$ville], Lt_prec[input$ville], list(dataType = "Dense",FVEthreshold=1)),
