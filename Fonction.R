@@ -8,7 +8,7 @@ library(JM)
 library(fda)
 
 data("pbc2")
-pbc2 <- pbc2 %>% arrange(id)
+pbc2 <- pbc2 %>% arrange(id) #ranger les données en fonction de l'id
 data("CanadianWeather")
 
 acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time="time", obs_min = 2, uniteTemps = "jour", format_date = "%b %d", type_location = "ville") {
@@ -35,7 +35,7 @@ acpf <- function(data, variable, threshold = 0.99, type, donnees, id="id", time=
   }
   
   acpf_dense_list <- function(data, donnees, variable, threshold = 0.99, uniteTemps = "jour", format_date = "%b %d", type_location = "ville"){
-    temp <- as.data.frame(CanadianWeather[[donnees]][, , variable])
+    temp <- as.data.frame(data[[donnees]][, , variable])
     
     colname <- uniteTemps
     temp <- dplyr::mutate(temp, !!colname := rownames(temp)) %>% relocate(last_col(), .before  = 1)
