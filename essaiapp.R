@@ -166,7 +166,7 @@ server <- function(input, output) {
                    "log10precip"= list(y_est = acpf_cw_log10prec$acpf$mu + (acpf_cw_log10prec$acpf$xiEst %*% t(acpf_cw_log10prec$acpf$phi)),
                                        obs = data.frame(time=1:365,acpf_cw_log10prec_xiest$data_obs))
     )
-    plot(acpf$y_est[1,], type = "l", xlab = "Time", ylab = "Y_est", main="Valeurs estimées de la première composante avec toutes les villes")
+    plot(acpf$y_est[1,], type = "l", xlab = "Time", ylab = "Y_est", main="Valeurs estimées avec les données observées des villes selectionnées")
     for (i in 2:ncol(acpf$obs)) {
       lines(acpf$obs$time, acpf$obs[, i], col = i - 1)
     }
