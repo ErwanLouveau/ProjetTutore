@@ -1,0 +1,284 @@
+---
+title: "Projet tutoré v1"
+author: "Mathilda Alhamadah"
+date: "2024-01-17"
+output: html_document
+---
+
+```{r importation packages}
+library(shiny)
+library(tidyr)
+library(ggplot2)
+library(dplyr)
+library(tibble)
+library("shiny")
+library("JM")
+library("fda")
+library("lubridate")
+library("MFPCA")
+```
+
+```{r Données au bon format}
+# Télécharger les données
+cw<- as.data.frame(CanadianWeather$dailyAv[,,1])
+
+# Ajouter la col jours
+cw <- rownames_to_column(cw, var = "jours")
+
+# Mettre en format long
+cw_long <- gather(cw, key = "ville", value = "temperature", -jours, factor_key = FALSE) #-jours = pour ajouter aux données format long la col jours
+
+#ou fonction pivot longer
+#cw_long <- pivot_longer(cw, cols = -jours, names_to = "ville", values_to = "temperature") %>% mutate(jours=factor(jours, levels=names(cw)[-1])) #ça merde pour les dates ça
+
+```
+
+```{r Convertir les jours en date}
+Sys.setlocale("LC_TIME","en_US.UTF-8")
+#cw_long$jours <- as.Date(cw_long$jours)
+cw_long$jours <- as_date(cw_long$jours, format = "%b%d")
+```
+
+```{r Interface utilisateur Shiny}
+
+ui <- fluidPage(
+  titlePanel("Spaghetti Plot des Températures"),
+  
+  sidebarLayout(
+    sidebarPanel(
+  checkboxGroupInput("selected_cities", label = "Sélectionnez les villes à afficher",
+                     choices = unique(cw_long$ville),
+                     selected = unique(cw_long$ville)
+      )
+    ),
+    mainPanel(
+      plotOutput("spaghetti_plot")
+    )
+  )
+)
+```
+
+```{r Lier le cochage des checkbox au server}
+
+server <- function(input, output) {
+  output$spaghetti_plot <- renderPlot({
+    filtered_data <- filter(cw_long, ville %in% input$selected_cities)
+    
+    ggplot(filtered_data, aes(x = jours, y = temperature, group = ville, color = ville)) +
+      #geom_smooth() +
+      geom_line() +
+      labs(title = "Spaghetti Plot des Températures",
+           x = "Date",
+           y = "Température (°C)",
+           color = "Ville") +
+      theme_minimal()
+  })
+}
+
+```
+
+
+```{r Re-run : splendide je peux mourir en paix}
+shinyApp(ui, server)
+```
+```{r Test package MFPCA}
+?MFPCA::MFPCA
+```
+
+```{r}
+# load packages ================================================================
+#install.packages("tidyverse")
+library(tidyverse)
+#install.packages("DynForest")
+library(DynForest)
+
+# package to compare
+library(fda)
+#install.packages("fdapace")
+library(fdapace)
+#install.packages("MFPCA")
+library(MFPCA)
+#install.packages("refund")
+library(refund)
+
+# load and visualise longitudinal data =========================================
+data(pbc2)
+str(pbc2)
+
+# plot longitudinal trajectories
+pbc2 %>% 
+  ggplot() + 
+  geom_line(aes(x=time, y = albumin, group = id)) + 
+  # geom_line(aes(x=time, y = albumin, group = id, colour = hepatomegaly)) + # colorer les courbes en fonction d'une covariable
+  theme_bw() + theme(legend.position = "top")
+
+pbc2 %>% 
+  ggplot() + 
+  geom_line(aes(x=time, y = serChol, group = id)) + 
+  # geom_line(aes(x=time, y = serChol, group = id, colour = hepatomegaly)) + # colorer les courbes en fonction d'une covariable
+  theme_bw() + theme(legend.position = "top")
+
+# is data regular ?
+summary(unlist(lapply(split(pbc2, pbc2$id), function(x) return(length(x$albumin))))) # check number of visits per participant
+summary(unlist(pbc2 %>% group_by(id) %>% group_map(~length(.x$albumin)))) # check number of visits per participant (idem but with tidyverse)
+summary(unlist(pbc2 %>% group_by(id) %>% group_map(~sum(is.na(.x$albumin))))) # check number of NA of albumin per participant
+
+summary(unlist(pbc2 %>% group_by(id) %>% group_map(~length(.x$serChol)))) # check number of visits per participant
+summary(unlist(pbc2 %>% group_by(id) %>% group_map(~sum(is.na(.x$serChol))))) # check number of NA of albumin per participant
+
+# preprocessing data ===========================================================
+
+# we only keep participant with at least 2 albumin values
+at_least_2_albu <- unlist(pbc2 %>% group_by(id) %>% group_map(~sum(!is.na(.x$albumin))>1))
+pbc2_albu <- pbc2 %>% filter(id %in% sort(unique(pbc2$id))[at_least_2_albu])
+unlist(pbc2_albu %>% group_by(id) %>% group_map(~sum(!is.na(.x$albumin))>1))
+
+# we only keep participant with at least 2 serum cholesterol values
+at_least_2_serChol <- unlist(pbc2 %>% group_by(id) %>% group_map(~sum(!is.na(.x$serChol))>1))
+pbc2_serChol <- pbc2 %>% filter(id %in% sort(unique(pbc2$id))[at_least_2_serChol])
+unlist(pbc2_serChol %>% group_by(id) %>% group_map(~sum(!is.na(.x$serChol))>1))
+
+# FPCA =========================================================================
+
+# FDA AND REFUND PACKAGES ===
+# limits because of regular grid demanded !
+
+# MFPCA AND FDAPACE PACKAGES ===
+
+# creation of objects
+pbc_list_albu <- split(pbc2_albu, f = pbc2_albu$id)
+pbc_Ly_albu <- lapply(pbc_list_albu, function(x) return(x$albumin))
+pbc_Lt_albu <- lapply(pbc_list_albu, function(x) return(x$time))
+
+pbc_list_serChol <- split(pbc2_serChol, f = pbc2_serChol$id)
+pbc_Ly_serChol <- lapply(pbc_list_serChol, function(x) return(x$serChol))
+pbc_Lt_serChol <- lapply(pbc_list_serChol, function(x) return(x$time))
+
+pbc_irregfd_albu <- irregFunData(pbc_Lt_albu, pbc_Ly_albu)
+pbc_irregfd_serChol <- irregFunData(pbc_Lt_serChol, pbc_Ly_serChol)
+
+plot(pbc_irregfd_albu, type = "l", col = "black")
+plot(pbc_irregfd_serChol, type = "l", col = "black", ylim = c(50,2000))
+
+# FDAPACE
+fpca_fdapace_albu <- FPCA(pbc_Ly_albu, pbc_Lt_albu, list(dataType = "Sparse"))
+fpca_fdapace_serChol <- FPCA(pbc_Ly_serChol, pbc_Lt_serChol, list(dataType = "Sparse"))
+
+plot(fpca_fdapace_albu)
+plot(fpca_fdapace_serChol)   
+
+fpca_fdapace_albu_FVE50 <- FPCA(pbc_Ly_albu, pbc_Lt_albu, list(dataType = "Sparse", FVEthreshold = 0.5))
+fpca_fdapace_albu_FVE99 <- FPCA(pbc_Ly_albu, pbc_Lt_albu, list(dataType = "Sparse", FVEthreshold = 0.99))
+plot(fpca_fdapace_albu_FVE50)
+plot(fpca_fdapace_albu_FVE99)
+
+# MFPCA
+fpca_mfpca_albu <- PACE(pbc_irregfd_albu, nbasis = 5, npc = 3)
+plot(fpca_mfpca_albu$mu)
+plot(fpca_mfpca_albu$functions)
+
+
+
+```
+
+```{r Graphe scores et individus}
+library(tidyverse)
+library(DynForest)
+library(fdapace)
+library(JM)
+library(fda)
+
+data("CanadianWeather")
+
+acpf_cw_temperature <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
+
+#scores = xiest*phi+mu
+cw_scores <- acpf_cw_temperature$xiEst %*% t(acpf_cw_temperature$phi) + matrix(rep(acpf_cw_temperature$mu, times = 35), nrow = 35, byrow = TRUE) 
+
+# Data
+selected_indiv = 1 #on choisit d'afficher l'individu 1 et son score (ici c'est St.Johns=le 1er individu)
+
+a=c(1:nrow(as.data.frame(CanadianWeather$dailyAv[, 1, "Temperature.C"])))  #ici nous c'est 365 individus
+b=cw_scores[selected_indiv,]    #on veut afficher l'individu sélectionné par l'utilisateur
+c=CanadianWeather$dailyAv[, selected_indiv, "Temperature.C"]
+
+# Graphe
+plot( b~a ,
+      type="l" ,
+      bty="l" ,
+      xlab="days" ,
+      ylab="avg temperature" , col=rgb(0.2,0.4,0.1,0.7) ,
+      lwd=3 ,
+      ylim=c(min(CanadianWeather$dailyAv[, , "Temperature.C"]),max(CanadianWeather$dailyAv[, , "Temperature.C"])) ) #ylim = les valeurs min et max pour cett var pour TOUS les indivs
+lines(c ~a , col=rgb(0.8,0.4,0.1,0.7) , lwd=3 , pch=19 , type="l" )
+
+# Legend
+legend("bottomleft", 
+       legend = c("model estimation (score)", "original data"), 
+       col = c(rgb(0.2,0.4,0.1,0.7), 
+               rgb(0.8,0.4,0.1,0.7)), 
+       lty=1, 
+       bty = "n", 
+       pt.cex = 2, 
+       cex = 1.2, 
+       text.col = "black", 
+       horiz = F , 
+       inset = c(0.1, 0.1))
+
+#fonction paste 0("individu", var) pour avoir titres dynamiques
+#rajouter des CP et/ou mettre la possibilité de mettre un nbmin de cp
+
+#fonction d'ERwan : pouvoir fixer le threshold ou le nb de CP (plutôt threshold + facile)
+
+```
+
+```{r Graphe contribution de chaque CP à la projection d'un indiv}
+acpf_cw_temperature <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
+
+#scores = xiest*phi+mu
+cw_scores <- acpf_cw_temperature$xiEst %*% t(acpf_cw_temperature$phi) + matrix(rep(acpf_cw_temperature$mu, times = 35), nrow = 35, byrow = TRUE) 
+
+# Paramètres utilisateur
+selected_indiv = 1
+nbmaxcp = 4
+
+# Données
+test2 <- data.frame(
+  name=c(colnames(as.data.frame(acpf_cw_temperature$xiEst))) ,  #noms des CP
+  value=acpf_cw_temperature$xiEst[selected_indiv,]              #les 4 col pour l'indiv sélectionné
+  )
+
+# Barplot
+ggplot(test2, aes(x=name, y=value)) + 
+  geom_bar(stat = "identity",
+           color = "grey",
+           fill = "lightblue") +
+  
+  coord_cartesian(ylim = c(min(acpf_cw_temperature$xiEst[,]),max(acpf_cw_temperature$xiEst[,])),#min et max en fonction du min et du max général
+                  xlim = c(1,nbmaxcp)) +
+  labs(x = "Composantes principales", y = "Coefficient associé")
+
+#ajouter sur le graphe quel individu l'estimation concerne et le nb de CP utilisées
+#+ faire un titre global pour tous les graphes des individus pour pas avoir à remettre toutes ces infos sur chaque titre de graphe
+#+ #pour changer le nom des Vi, faire colnames(matrice) = c("CP1","CP2",...), vecteur à automatiser
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
