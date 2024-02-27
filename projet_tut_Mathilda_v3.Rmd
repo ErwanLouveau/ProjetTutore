@@ -263,7 +263,8 @@ ggplot(test2, aes(x=name, y=value)) +
 #+ #pour changer le nom des Vi, faire colnames(matrice) = c("CP1","CP2",...), vecteur à automatiser
 ```
 
-
+essayer d'utiliser une autre fonction que layout()
+vérifier si le flowlayout dans l'ui a une bonne syntaxe
 
 
 
