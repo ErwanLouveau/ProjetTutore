@@ -11,15 +11,11 @@ library(shiny)
 library(skimr)
 library(dplyr)
 library(tidyverse)
+library(DynForest)
+library(fdapace)
+library(JM)
+library(fda)
 
-#tests
-x <- c(1,2,3,4,5)
-y <- c(2,5,9,7,8)
-
-graph1 = ggplot(data= data.frame(x,y), mapping = aes(x,y)) + geom_point()
-graph2 = ggplot(data= data.frame(c(1,2,3,4,5),c(9,8,5,7,2)), mapping = aes(x,y)) + geom_point()
-graph3 = ggplot(data= data.frame(x = c(1,2,3,4,5),y=c(4,3,5,1,6)), mapping = aes(x,y)) + geom_point()
-plot(graph3)
 
 # fonction pour vérifier que les variables du jeu de données sont toutes numériques
 
@@ -57,13 +53,7 @@ tdc <- function(x){
                                         # visualisation du jeu de données
                                         dataTableOutput("dataframe")
                                ),
-                               tabPanel("Data visualisation",
-                                        #test pour savoir où je dois mettre quoi
-                                        fluidRow(
-                                          column(12,
-                                                 p("Voici les données visualisées:")
-                                          )
-                                        )
+                               tabPanel("Data visualisation"
                                ),
                                tabPanel("Data type",
                                )
@@ -78,11 +68,9 @@ tdc <- function(x){
                       p("Voici les données visualisées:")
                )
              ),
-             flowLayout(
-               numericInput("rows", "How many rows?", 5),
-               selectInput("letter", "Which letter?", LETTERS),
-               sliderInput("value", "What value?", 0, 100, 50)
-               ),
+             # flowLayout(           #essai
+             #   
+             #   ),
              fluidPage(
                plotOutput("graphique") #essai graphe
              ),
