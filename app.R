@@ -63,12 +63,7 @@ tdc <- function(x){
                                           column(12,
                                                  p("Voici les données visualisées:")
                                           )
-                                        ),
-                                        flowLayout(
-                                          numericInput("rows", "How many rows?", 5),
-                                          selectInput("letter", "Which letter?", LETTERS),
-                                          sliderInput("value", "What value?", 0, 100, 50)),
-                                        tableOutput("test")
+                                        )
                                ),
                                tabPanel("Data type",
                                )
@@ -89,7 +84,7 @@ tdc <- function(x){
                sliderInput("value", "What value?", 0, 100, 50)
                ),
              fluidPage(
-               plotOutput("graphique_affiche") #essai graphe
+               plotOutput("graphique") #essai graphe
              ),
              tableOutput("test")
     )
@@ -131,7 +126,9 @@ tdc <- function(x){
       # demander à l'utilisateur la variable ID, la variable numérique et la variable temps
       
     })
-    output$graphique_affiche <- renderPlot({
+    output$graphique <- renderPlot({
+      x <- c(1,2,3,4,5)
+      y <- c(2,5,9,7,8)
       plot(x, y, type = "o", col = "blue", xlab = "X", ylab = "Y", main = "Graphique de X par rapport à Y") #essai
     })
     
