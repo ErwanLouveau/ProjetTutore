@@ -39,13 +39,11 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
   
   data <- data %>% filter(!is.na(.data[[variable]]))
   
-<<<<<<< HEAD
   #BUG quand le jeu de données est transposé
   at_least <- unlist(data %>% group_by(.data[[id]]) %>% group_map(~sum(!is.na(.x[[variable]]))>=obs_min))
   # print(at_least)
-=======
   at_least <- unlist(data %>% group_by(.data[[id]]) %>% group_map(~sum(!is.na(.x[[variable]]))>=obs_min))
->>>>>>> 4b69ba7b4773a01b0e45175f4a205d50ccd95c4b
+
   data_var <- data %>% filter(.data[[id]] %in% sort(unique(data$id))[at_least])
   
   data_list <- split(data_var, f = data_var$id)
