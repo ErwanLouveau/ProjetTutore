@@ -1,0 +1,113 @@
+---
+title: "Projet tutoré v1"
+author: "Mathilda Alhamadah"
+date: "2024-01-17"
+output: html_document
+---
+
+
+```{r Graphe scores et individus}
+library(tidyverse)
+library(DynForest)
+library(fdapace)
+library(JM)
+library(fda)
+
+#test avec cw
+
+data("CanadianWeather")
+data<- CanadianWeather
+
+acpf_data <- acpf(data, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
+
+#scores = xiest*phi+mu
+data_scores <- acpf_data$xiEst %*% t(acpf_data$phi) + matrix(rep(acpf_data$mu, times = 35), nrow = 35, byrow = TRUE) 
+
+# Data
+selected_indiv = 1 #on choisit d'afficher l'individu 1 et son score (ici c'est St.Johns=le 1er individu)
+
+a=c(1:nrow(as.data.frame(data$dailyAv[, 1, "Temperature.C"])))  #ici nous c'est 365 individus
+b=data_scores[selected_indiv,]    #on veut afficher l'individu sélectionné par l'utilisateur
+c=data$dailyAv[, selected_indiv, "Temperature.C"]
+
+# Graphe
+plot( b~a ,
+      type="l" ,
+      bty="l" ,
+      xlab="time" ,
+      ylab="variable y" , col=rgb(0.2,0.4,0.1,0.7) ,
+      lwd=3 ,
+      ylim=c(min(data$dailyAv[, , "Temperature.C"]),max(data$dailyAv[, , "Temperature.C"])) ) #ylim = les valeurs min et max pour cett var pour TOUS les indivs
+lines(c ~a , col=rgb(0.8,0.4,0.1,0.7) , lwd=3 , pch=19 , type="l" )
+
+# Legend
+legend("bottomleft", 
+       legend = c("model estimation (score)", "original data"), 
+       col = c(rgb(0.2,0.4,0.1,0.7), 
+               rgb(0.8,0.4,0.1,0.7)), 
+       lty=1, 
+       bty = "n", 
+       pt.cex = 2, 
+       cex = 1.2, 
+       text.col = "black", 
+       horiz = F , 
+       inset = c(0.1, 0.1))
+
+#fonction paste 0("individu", var) pour avoir titres dynamiques
+#rajouter des CP et/ou mettre la possibilité de mettre un nbmin de cp
+
+#fonction d'ERwan : pouvoir fixer le threshold ou le nb de CP (plutôt threshold + facile)
+
+```
+
+```{r Graphe contribution de chaque CP à la projection d'un indiv}
+acpf_cw_temperature <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
+
+#scores = xiest*phi+mu
+cw_scores <- acpf_cw_temperature$xiEst %*% t(acpf_cw_temperature$phi) + matrix(rep(acpf_cw_temperature$mu, times = 35), nrow = 35, byrow = TRUE) 
+
+# Paramètres utilisateur
+selected_indiv = 1
+nbmaxcp = 4
+
+# Données
+test2 <- data.frame(
+  name=c(colnames(as.data.frame(acpf_cw_temperature$xiEst))) ,  #noms des CP
+  value=acpf_cw_temperature$xiEst[selected_indiv,]              #les 4 col pour l'indiv sélectionné
+  )
+
+# Barplot
+ggplot(test2, aes(x=name, y=value)) + 
+  geom_bar(stat = "identity",
+           color = "grey",
+           fill = "lightblue") +
+  
+  coord_cartesian(ylim = c(min(acpf_cw_temperature$xiEst[,]),max(acpf_cw_temperature$xiEst[,])),#min et max en fonction du min et du max général
+                  xlim = c(1,nbmaxcp)) +
+  labs(x = "Composantes principales", y = "Coefficient associé")
+
+#ajouter sur le graphe quel individu l'estimation concerne et le nb de CP utilisées
+#+ faire un titre global pour tous les graphes des individus pour pas avoir à remettre toutes ces infos sur chaque titre de graphe
+#+ #pour changer le nom des Vi, faire colnames(matrice) = c("CP1","CP2",...), vecteur à automatiser
+```
+
+essayer d'utiliser une autre fonction que layout()
+vérifier si le flowlayout dans l'ui a une bonne syntaxe
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

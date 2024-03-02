@@ -188,28 +188,31 @@ library(fdapace)
 library(JM)
 library(fda)
 
-data("CanadianWeather")
+#test avec cw
 
-acpf_cw_temperature <- acpf(CanadianWeather, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
+data("CanadianWeather")
+data<- CanadianWeather
+
+acpf_data <- acpf(data, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
 
 #scores = xiest*phi+mu
-cw_scores <- acpf_cw_temperature$xiEst %*% t(acpf_cw_temperature$phi) + matrix(rep(acpf_cw_temperature$mu, times = 35), nrow = 35, byrow = TRUE) 
+data_scores <- acpf_data$xiEst %*% t(acpf_data$phi) + matrix(rep(acpf_data$mu, times = 35), nrow = 35, byrow = TRUE) 
 
 # Data
 selected_indiv = 1 #on choisit d'afficher l'individu 1 et son score (ici c'est St.Johns=le 1er individu)
 
-a=c(1:nrow(as.data.frame(CanadianWeather$dailyAv[, 1, "Temperature.C"])))  #ici nous c'est 365 individus
-b=cw_scores[selected_indiv,]    #on veut afficher l'individu sélectionné par l'utilisateur
-c=CanadianWeather$dailyAv[, selected_indiv, "Temperature.C"]
+a=c(1:nrow(as.data.frame(data$dailyAv[, 1, "Temperature.C"])))  #ici nous c'est 365 individus
+b=data_scores[selected_indiv,]    #on veut afficher l'individu sélectionné par l'utilisateur
+c=data$dailyAv[, selected_indiv, "Temperature.C"]
 
 # Graphe
 plot( b~a ,
       type="l" ,
       bty="l" ,
-      xlab="days" ,
-      ylab="avg temperature" , col=rgb(0.2,0.4,0.1,0.7) ,
+      xlab="time" ,
+      ylab="variable y" , col=rgb(0.2,0.4,0.1,0.7) ,
       lwd=3 ,
-      ylim=c(min(CanadianWeather$dailyAv[, , "Temperature.C"]),max(CanadianWeather$dailyAv[, , "Temperature.C"])) ) #ylim = les valeurs min et max pour cett var pour TOUS les indivs
+      ylim=c(min(data$dailyAv[, , "Temperature.C"]),max(data$dailyAv[, , "Temperature.C"])) ) #ylim = les valeurs min et max pour cett var pour TOUS les indivs
 lines(c ~a , col=rgb(0.8,0.4,0.1,0.7) , lwd=3 , pch=19 , type="l" )
 
 # Legend
