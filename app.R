@@ -69,9 +69,13 @@ tdc <- function(x){
                              selectInput("time", label = "Variable temps",
                                          choices = NULL,multiple = F),
                              selectInput("id_select", label = "Individu sélectionnés",
-                                         choices = NULL,multiple = T)
+                                         choices = NULL,multiple = T),
+                             actionButton("plotButton", "Plot"),
+                             actionButton("selectAllButton", "Sélectionner tous les individus")
                            ),
-                           mainPanel(fluidRow(column(6, plotOutput("plot_spag")))
+                           mainPanel(
+                             fluidRow(
+                               column(6, plotOutput("plot_spag")))
                            )
                          )
       )
@@ -109,11 +113,11 @@ tdc <- function(x){
       #print(input$id)
       if (!is.null(input$id) && input$id != "") {
         id_select <- unique(current_data[, input$id])
-        updateSelectInput(session, "id_select", choices = id_select, selected = id_select[1])
+        updateSelectInput(session, "id_select", choices = id_select, selected = id_select[1,])
       } else {
-        # Faites quelque chose si input$id est vide ou n'est pas une colonne valide
-        print("Invalid or empty column name selected.")
+        print("Individu non selectionné ou incorrect")
       }
+      
     })
     # visualisation des données
     output$test <- renderTable({
@@ -125,19 +129,19 @@ tdc <- function(x){
       # Regarder le nombre de NA 
       # demander à l'utilisateur la variable ID, la variable numérique et la variable temps
     })
-    output$plot_spag<- renderPlot({
+    observeEvent(input$plotButton, {
       data_spag <- data()
-      #print(data_spag)
-      idSelect <- as.numeric(input$id_select)
-      # print(idSelect)
+      idSelect <- input$id_select
       data_spag <- filter(data_spag, !!sym(input$id) %in% idSelect)
-      ggplot(data_spag, aes(x=!!sym(input$time) ,y=!!sym(input$variable_acpf), group=!!sym(input$id), color = !!sym(input$id))) +
-        geom_line() + 
-        labs(title = paste("SpaghettiPlot représentant la", input$variable_acpf, "chez différents individus"),
-             x = input$time,
-             y = input$variable_acpf,
-             color="Individus") +
-        theme_bw()
+      output$plot_spag <- renderPlot({
+        ggplot(data_spag, aes(x=!!sym(input$time) ,y=!!sym(input$variable_acpf), group=!!sym(input$id), color = !!sym(input$id))) +
+          geom_line() + 
+          labs(title = paste("SpaghettiPlot représentant la", input$variable_acpf, "chez différents individus"),
+               x = input$time,
+               y = input$variable_acpf,
+               color="Individus") +
+          theme_bw()
+      })
     })
   }
   
