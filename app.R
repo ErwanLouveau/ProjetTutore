@@ -128,13 +128,13 @@ tdc <- function(x){
     output$plot_spag<- renderPlot({
       data_spag <- data()
       #print(data_spag)
-      idSelect <- list(as.numeric(input$id_select))
+      idSelect <- as.numeric(input$id_select)
       # print(idSelect)
-      # data_spag <- filter(data_spag, !!sym(input$id) %in% id_select)
+      data_spag <- filter(data_spag, !!sym(input$id) %in% idSelect)
       ggplot(data_spag, aes(x=!!sym(input$time) ,y=!!sym(input$variable_acpf), group=!!sym(input$id), color = !!sym(input$id))) +
         geom_line() + 
         labs(title = paste("SpaghettiPlot représentant la", input$variable_acpf, "chez différents individus"),
-             x = "Temps",
+             x = input$time,
              y = input$variable_acpf,
              color="Individus") +
         theme_bw()
@@ -143,3 +143,7 @@ tdc <- function(x){
   
   # Run the application 
   shinyApp(ui = ui, server = server)
+
+  
+# Erreur lors de la transposition. Une fois le jeu de données transposé et les graph tracés,
+# crash quand il y a détransposition ou quand l'on importe un autre df
