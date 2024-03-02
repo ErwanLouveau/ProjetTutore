@@ -28,6 +28,28 @@ tdc <- function(x){
   }else{tap <- TRUE}
   return(tap)
 }
+
+acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 0.99){
+  if (!is.data.frame(data)){
+    stop("Le dataframe n'existe pas, est vide, ou n'est pas un dataframe.")
+  }
+  if (!(variable %in% colnames(data))){
+    stop("La variable spécifiée n'existe pas dans le dataframe.")
+  }
+  
+  data <- data %>% filter(!is.na(.data[[variable]]))
+  
+  at_least <- unlist(data %>% group_by(.data[[id]]) %>% group_map(~sum(!is.na(.x[[variable]]))>=obs_min))
+  data_var <- data %>% filter(.data[[id]] %in% sort(unique(data$id))[at_least])
+  
+  data_list <- split(data_var, f = data_var$id)
+  data_Ly <- lapply(data_list, function(.x) return(.x[[variable]]))
+  data_Lt <- lapply(data_list, function(.x) return(.x[[time]]))
+  
+  acpf_ <- FPCA(data_Ly, data_Lt, list(FVEthreshold = threshold))
+  return(list(acpf = acpf_, data_obs = data_Ly, time = data_Lt))
+}
+
   # Define UI for application that draws a histogram
   ui <- fluidPage(
     tabsetPanel(tabPanel("Importation et visualisation des données",
@@ -75,7 +97,8 @@ tdc <- function(x){
                            ),
                            mainPanel(
                              fluidRow(
-                               column(6, plotOutput("plot_spag")))
+                               column(6, plotOutput("plot_spag")),
+                               column(6, plotOutput("plot_mu")))
                            )
                          )
       )
@@ -113,7 +136,7 @@ tdc <- function(x){
       #print(input$id)
       if (!is.null(input$id) && input$id != "") {
         id_select <- unique(current_data[, input$id])
-        updateSelectInput(session, "id_select", choices = id_select, selected = id_select[1,])
+        updateSelectInput(session, "id_select", choices = id_select, selected = id_select[1])
       } else {
         print("Individu non selectionné ou incorrect")
       }
@@ -131,6 +154,13 @@ tdc <- function(x){
     })
     observeEvent(input$plotButton, {
       data_spag <- data()
+      
+      data_acpf <- data()
+      acpfVar <- input$variable_acpf
+      idVar <- input$id
+      timeVar <- input$time
+      acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = 2, threshold = 0.99)
+      
       idSelect <- input$id_select
       data_spag <- filter(data_spag, !!sym(input$id) %in% idSelect)
       output$plot_spag <- renderPlot({
@@ -141,6 +171,16 @@ tdc <- function(x){
                y = input$variable_acpf,
                color="Individus") +
           theme_bw()
+      })
+      
+      acpf_mu_df <- as.data.frame(acpf_obj$acpf$mu) %>% rename(mu = 'acpf_obj$acpf$mu')
+      acpf_mu_df <- acpf_mu_df %>% mutate(temps = seq(1, n(), 1))
+      output$plot_mu <- renderPlot({
+        ggplot(acpf_mu_df, aes(x = temps, y = mu)) +
+          geom_line() +
+          labs(title = "Fonction mu de l'ACPF", 
+               x = "Temps", y = sprintf("mu de la variable %s", input$variable_acpf)) +
+          theme_minimal()
       })
     })
   }
