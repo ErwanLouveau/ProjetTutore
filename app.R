@@ -88,21 +88,24 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                 tabPanel("ACPF",
                          sidebarLayout(
                            sidebarPanel(
-                             selectInput("variable_acpf", label = "Variable à observer",
-                                         choices = NULL,multiple = F),
                              selectInput("id", label = "Variable identifiant",
+                                         choices = NULL,multiple = F),
+                             selectInput("variable_acpf", label = "Variable à observer",
                                          choices = NULL,multiple = F),
                              selectInput("time", label = "Variable temps",
                                          choices = NULL,multiple = F),
                              selectInput("id_select", label = "Individu sélectionnés",
                                          choices = NULL,multiple = T),
+                             selectInput("id_select_score", label = "Individus sélectionné pour le calcul du score",
+                                         choices = NULL,multiple = F),
                              actionButton("plotButton", "Plot"),
                              actionButton("selectAllButton", "Sélectionner tous les individus")
                            ),
                            mainPanel(
                              fluidRow(
                                column(6, plotOutput("plot_spag")),
-                               column(6, plotOutput("plot_mu")))
+                               column(6, plotOutput("plot_mu")),
+                               column(6, plotOutput("plot_score")))
                            )
                          )
       )
@@ -141,6 +144,13 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       if (!is.null(input$id) && input$id != "") {
         id_select <- unique(current_data[, input$id])
         updateSelectInput(session, "id_select", choices = id_select, selected = id_select[1])
+      } else {
+        print("Individu non selectionné ou incorrect")
+      }
+      
+      if (!is.null(input$id) && input$id != "") {
+        id_select_score <- unique(current_data[, input$id])
+        updateSelectInput(session, "id_select_score", choices = id_select_score)
       } else {
         print("Individu non selectionné ou incorrect")
       }
@@ -185,6 +195,21 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
           labs(title = "Fonction mu de l'ACPF", 
                x = "Temps", y = sprintf("mu de la variable %s", input$variable_acpf)) +
           theme_minimal()
+      })
+      
+      print(length(acpf_obj$data_obs))
+      scores <- acpf_obj$acpf$xiEst %*% t(acpf_obj$acpf$phi) + matrix(rep(acpf_obj$acpf$mu, times = length(acpf_obj$data_obs)), nrow = length(acpf_obj$data_obs), byrow = TRUE)
+      indivPlot <- input$id_select_score
+      print(indivPlot)
+      indivScore <- scores[,as.numeric(indivPlot)] # necessite de mettre en place un index pour les identifiants de type string
+      # temps <- c(1:length(acpf_obj$data_obs))
+      # print(indivScore)
+      # print(temps)
+      indivScore_df <- as.data.frame(indivScore)
+      indivScore_df <- indivScore_df %>% mutate(temps = seq(1, n(), 1))
+      output$plot_score <- renderPlot({
+        ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
+          geom_line()
       })
     })
   }
