@@ -11,6 +11,7 @@ library(shiny)
 library(skimr)
 library(dplyr)
 library(tidyverse)
+library(fdapace)
 
 # fonction pour calculer l'acp
 
@@ -38,15 +39,26 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
   }
   
   data <- data %>% filter(!is.na(.data[[variable]]))
-  
-  #BUG quand le jeu de données est transposé
+  # print(unique(data[[id]]))
+  #BUG quand le jeu de données à des id type string
   at_least <- unlist(data %>% group_by(.data[[id]]) %>% group_map(~sum(!is.na(.x[[variable]]))>=obs_min))
-  # print(at_least)
-  at_least <- unlist(data %>% group_by(.data[[id]]) %>% group_map(~sum(!is.na(.x[[variable]]))>=obs_min))
-
-  data_var <- data %>% filter(.data[[id]] %in% sort(unique(data$id))[at_least])
+  # print(sort(unique(data[[id]])[at_least])) # fonctionne
+  # print(data[[id]] %in% sort(unique(data[[id]])[at_least])) #fonctionne
   
-  data_list <- split(data_var, f = data_var$id)
+  # data_var <- data %>% filter(.data[[id]] %in% sort(unique(data$id))[at_least])
+  # data_var <- data %>% filter(.data[[id]] %in% sort(unique(data[[id]])[at_least]))
+  # print(data_var)
+  
+  # data_list <- split(data_var, f = data_var$id)
+  # data_list <- split(data_var, f = data_var[[id]])
+  
+  if (is.numeric(data[[id]])==T){
+    data_var <- data %>% filter(.data[[id]] %in% sort(unique(data$id))[at_least])
+    data_list <- split(data_var, f = data_var$id)
+  } else{
+    data_var <- data %>% filter(.data[[id]] %in% sort(unique(data[[id]])[at_least]))
+    data_list <- split(data_var, f = data_var[[id]])
+  }
   data_Ly <- lapply(data_list, function(.x) return(.x[[variable]]))
   data_Lt <- lapply(data_list, function(.x) return(.x[[time]]))
   
@@ -170,6 +182,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       data_spag <- data()
       
       data_acpf <- data()
+      # print(data_acpf)
       acpfVar <- input$variable_acpf
       idVar <- input$id
       timeVar <- input$time
@@ -197,19 +210,28 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
           theme_minimal()
       })
       
-      print(length(acpf_obj$data_obs))
+
       scores <- acpf_obj$acpf$xiEst %*% t(acpf_obj$acpf$phi) + matrix(rep(acpf_obj$acpf$mu, times = length(acpf_obj$data_obs)), nrow = length(acpf_obj$data_obs), byrow = TRUE)
-      indivPlot <- input$id_select_score
-      print(indivPlot)
-      indivScore <- scores[,as.numeric(indivPlot)] # necessite de mettre en place un index pour les identifiants de type string
-      # temps <- c(1:length(acpf_obj$data_obs))
-      # print(indivScore)
-      # print(temps)
+      liste_id <- sort(unique(data_acpf[[idVar]]))
+      liste_id_df <- as.data.frame(liste_id)
+      liste_id_df <- liste_id_df %>% mutate(id_num = seq(1, n(), 1))
+      position <- which(liste_id_df$liste_id %in% input$id_select_score)
+      # print(selected_row)
+      indivPlot <- liste_id_df[position, "id_num"]
+      # print(indivPlot)acpf_obj
+      
+      indivScore <- scores[as.numeric(indivPlot),] # necessite de mettre en place un index pour les identifiants de type string
       indivScore_df <- as.data.frame(indivScore)
       indivScore_df <- indivScore_df %>% mutate(temps = seq(1, n(), 1))
+      indivPlot_dataobs <- acpf_obj$data_obs[indivPlot]
+      indivPlotdataObs <- as.data.frame(indivPlot_dataobs)
+      names(indivPlotdataObs)[1] <- "Valeur"
+      indivPlotdataObs <- indivPlotdataObs %>% mutate(temps = seq(1, n(), 1))
+      # print(indivPlotdataObs)
       output$plot_score <- renderPlot({
         ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
-          geom_line()
+          geom_line() +
+          geom_line(data = indivPlotdataObs, aes(x = temps, y = Valeur), color = "red")
       })
     })
   }
