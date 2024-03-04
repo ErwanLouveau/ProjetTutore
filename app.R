@@ -39,18 +39,8 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
   }
   
   data <- data %>% filter(!is.na(.data[[variable]]))
-  # print(unique(data[[id]]))
-  #BUG quand le jeu de données à des id type string
   at_least <- unlist(data %>% group_by(.data[[id]]) %>% group_map(~sum(!is.na(.x[[variable]]))>=obs_min))
-  # print(sort(unique(data[[id]])[at_least])) # fonctionne
-  # print(data[[id]] %in% sort(unique(data[[id]])[at_least])) #fonctionne
-  
-  # data_var <- data %>% filter(.data[[id]] %in% sort(unique(data$id))[at_least])
-  # data_var <- data %>% filter(.data[[id]] %in% sort(unique(data[[id]])[at_least]))
-  # print(data_var)
-  
-  # data_list <- split(data_var, f = data_var$id)
-  # data_list <- split(data_var, f = data_var[[id]])
+
   
   if (is.numeric(data[[id]])==T){
     data_var <- data %>% filter(.data[[id]] %in% sort(unique(data$id))[at_least])
@@ -231,7 +221,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       output$plot_score <- renderPlot({
         ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
           geom_line() +
-          geom_line(data = indivPlotdataObs, aes(x = temps, y = Valeur), color = "red")
+          geom_point(data = indivPlotdataObs, aes(x = temps, y = Valeur), color = "red")
       })
     })
   }
