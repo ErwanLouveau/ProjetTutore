@@ -17,6 +17,51 @@ library(fdapace)
 
 # fonction pour vérifier que les variables du jeu de données sont toutes numériques
 
+na_person <- function(x,y){
+  data_na <- data.frame()
+  for (i in 1:length(x)) {
+    ttt <- x %>% 
+      mutate(test = is.na(x[,i])==T) %>% 
+      mutate(test2 = ifelse(test==T,1,0)) %>% 
+      group_by(eval(parse(text = y))) %>% #eval(parse()) c'est pour enlever les guillements de l'objet y
+      summarise(test = sum(test2))
+    
+    na_per_pers_min <- min(ttt$test)
+    na_per_pers_max <- max(ttt$test)
+    na_per_pers_med <- median(ttt$test)
+    na_per_pers_moy <- round(mean(ttt$test),2)
+    skim_variable <- colnames(x[i])
+    
+    new_data <- data.frame(skim_variable,na_per_pers_min,
+                           na_per_pers_max,
+                           na_per_pers_med,
+                           na_per_pers_moy)
+    data_na <- rbind(data_na,new_data)
+  }
+      return(data_na)
+}
+
+IsRegular = function(t){
+  
+  # Check the data type in terms of dense-sparse. Classification is dense (2), or  data with missing values (1) or sparse (0) data
+  # t : n-by-1 list of vectors 
+  
+  tt = unlist(t);
+  f = length(tt)/length(unique(tt))/length(t);
+  if (f == 1){
+    if(length(unique(tt))<8){ #In case of low number of observations per subject
+      return('Sparse');
+    }
+    else{
+      return('Dense'); # for either regular and irregular data
+    }
+  } else if(f > 0.80){
+    return('DenseWithMV');
+  } else {
+    return('Sparse');
+  }
+}
+
 tdc <- function(x){
   list <- data.frame("test"="")
   for (i in 2:length(x)) {
@@ -162,11 +207,9 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
     output$test <- renderTable({
       data2 <- data() %>% 
         mutate_at(input$variable, as.factor)
-      skim(data2)
-      # Donner automatiquement le type de donnée à l'utilisateur (sparse ou dense)
-      # regarder le nombres d'occurences de l'ID Si pas le même alors données éparses
-      # Regarder le nombre de NA 
-      # demander à l'utilisateur la variable ID, la variable numérique et la variable temps
+      
+      # merge les stats les deux fonctions pour les stats g et les na par personne
+      merge(skim(data2), na_person(data2,input$variable_id), by.x = "skim_variable")
     })
     observeEvent(input$plotButton, {
       data_spag <- data()
@@ -221,7 +264,8 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       output$plot_score <- renderPlot({
         ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
           geom_line() +
-          geom_point(data = indivPlotdataObs, aes(x = temps, y = Valeur), color = "red")
+          geom_point(data = indivPlotdataObs, aes(x = temps, y = Valeur), color = "red") +
+        theme_minimal()
       })
     })
   }
