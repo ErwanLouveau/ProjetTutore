@@ -141,10 +141,23 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                                          choices = NULL,multiple = F),
                              selectInput("time", label = "Variable temps",
                                          choices = NULL,multiple = F),
-                             selectInput("id_select", label = "Individu sélectionnés",
+                             selectInput("id_select", label = "Individu(s) sélectionné(s)",
                                          choices = NULL,multiple = T),
                              selectInput("id_select_score", label = "Individus sélectionné pour le calcul du score",
                                          choices = NULL,multiple = F),
+                             radioButtons("choix", label="Affichage des Composantes Principales en fonction : ",choices = list("Nombre de CP :" = 1, "PVE" = 2),selected = 2),
+                             conditionalPanel(
+                               condition = "input.choix == 1",
+                               numericInput("nbCP",label="Nombre de CP :", value = 3, min = 1, max = 6)
+                             ),
+                             conditionalPanel(
+                               condition = "input.choix == 2",
+                               numericInput("PVE",label=" % de variances expliqué :", value = 99, min =50 , max = 100, step=0.01)
+                             ),
+                             radioButtons("typeTrace", "Type de tracé",
+                                          choices = list("Etoiles" = "etoiles", "Ligne" = "ligne"),
+                                          selected = "etoiles"
+                             ),
                              actionButton("plotButton", "Plot"),
                              actionButton("selectAllButton", "Sélectionner tous les individus")
                            ),
@@ -182,12 +195,12 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       current_data <- data()
       var_names <- colnames(data())
       var_names_num <- var_names[sapply(current_data[var_names], is.numeric)]
+      # var_ind <- unique(data()[[input$id]])
       updateSelectInput(session, "variable", choices = var_names, selected = var_names[1])
       updateSelectInput(session, "variable_acpf", choices = var_names_num, selected = var_names_num[1])
       updateSelectInput(session, "id", choices = var_names, selected = if (is.null(input$id)) var_names[1] else input$id)
       updateSelectInput(session, "time", choices = var_names, selected = var_names[1])
       
-      #print(input$id)
       if (!is.null(input$id) && input$id != "") {
         id_select <- unique(current_data[, input$id])
         updateSelectInput(session, "id_select", choices = id_select, selected = id_select[1])
@@ -195,12 +208,23 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
         print("Individu non selectionné ou incorrect")
       }
       
+      # if ("tous" %in% input$id_select) {
+      #   ind<- current_data[[input$id]]# Tous les individus
+      # } else if ("aucun" %in% input$id_select){
+      #   ind<-NULL
+      # }else {
+      #   ind <- input$id_select  # Individus spécifiquement sélectionnés
+      # }
+      # updateSelectInput(session, "id_select", choices = c(tous="tous",aucun="aucun",var_ind), selected = ind)
+      
       if (!is.null(input$id) && input$id != "") {
         id_select_score <- unique(current_data[, input$id])
+        # print(id_select_score)
         updateSelectInput(session, "id_select_score", choices = id_select_score)
       } else {
         print("Individu non selectionné ou incorrect")
       }
+  
       
     })
     # visualisation des données
@@ -211,26 +235,34 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       # merge les stats les deux fonctions pour les stats g et les na par personne
       merge(skim(data2), na_person(data2,input$variable_id), by.x = "skim_variable")
     })
+    
+    #plot
     observeEvent(input$plotButton, {
       data_spag <- data()
       
       data_acpf <- data()
       # print(data_acpf)
       acpfVar <- input$variable_acpf
+      # print(acpfVar)
       idVar <- input$id
+      # print(idVar)
       timeVar <- input$time
-      acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = 2, threshold = 0.99)
+      # print(timeVar)
+      # print(input$PVE)
+      nb_threshold = input$PVE * 0.01
+      acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = 2, threshold = nb_threshold)
       
       idSelect <- input$id_select
-      data_spag <- filter(data_spag, !!sym(input$id) %in% idSelect)
+      data_spag <- filter(data_spag, input$id %in% idSelect)
+      # print(data_spag)
       output$plot_spag <- renderPlot({
         ggplot(data_spag, aes(x=!!sym(input$time) ,y=!!sym(input$variable_acpf), group=!!sym(input$id), color = !!sym(input$id))) +
-          geom_line() + 
+          geom_line() +
           labs(title = paste("SpaghettiPlot représentant la", input$variable_acpf, "chez différents individus"),
                x = input$time,
                y = input$variable_acpf,
                color="Individus") +
-          theme_bw()
+          theme_minimal()
       })
       
       acpf_mu_df <- as.data.frame(acpf_obj$acpf$mu) %>% rename(mu = 'acpf_obj$acpf$mu')
@@ -238,41 +270,54 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       output$plot_mu <- renderPlot({
         ggplot(acpf_mu_df, aes(x = temps, y = mu)) +
           geom_line() +
-          labs(title = "Fonction mu de l'ACPF", 
+          labs(title = "Fonction moyenne de l'ACPF", 
                x = "Temps", y = sprintf("mu de la variable %s", input$variable_acpf)) +
           theme_minimal()
       })
       
+      if (IsRegular(data_acpf)!="Sparse"){
+        scores <- acpf_obj$acpf$xiEst %*% t(acpf_obj$acpf$phi) + matrix(rep(acpf_obj$acpf$mu, times = length(acpf_obj$data_obs)), nrow = length(acpf_obj$data_obs), byrow = TRUE)
+        liste_id <- sort(unique(data_acpf[[idVar]]))
+        liste_id_df <- as.data.frame(liste_id)
+        liste_id_df <- liste_id_df %>% mutate(id_num = seq(1, n(), 1))
+        position <- which(liste_id_df$liste_id %in% input$id_select_score)
+        # print(selected_row)
+        indivPlot <- liste_id_df[position, "id_num"]
+        # print(indivPlot)acpf_obj
 
-      scores <- acpf_obj$acpf$xiEst %*% t(acpf_obj$acpf$phi) + matrix(rep(acpf_obj$acpf$mu, times = length(acpf_obj$data_obs)), nrow = length(acpf_obj$data_obs), byrow = TRUE)
-      liste_id <- sort(unique(data_acpf[[idVar]]))
-      liste_id_df <- as.data.frame(liste_id)
-      liste_id_df <- liste_id_df %>% mutate(id_num = seq(1, n(), 1))
-      position <- which(liste_id_df$liste_id %in% input$id_select_score)
-      # print(selected_row)
-      indivPlot <- liste_id_df[position, "id_num"]
-      # print(indivPlot)acpf_obj
+        indivScore <- scores[as.numeric(indivPlot),] # necessite de mettre en place un index pour les identifiants de type string
+        indivScore_df <- as.data.frame(indivScore)
+        indivScore_df <- indivScore_df %>% mutate(temps = seq(1, n(), 1))
+        indivPlot_dataobs <- acpf_obj$data_obs[indivPlot]
+        indivPlotdataObs <- as.data.frame(indivPlot_dataobs)
+        names(indivPlotdataObs)[1] <- "Valeur"
+        indivPlotdataObs <- indivPlotdataObs %>% mutate(temps = seq(1, n(), 1))
+        # print(indivPlotdataObs)
+        if (input$typeTrace == "etoiles"){
+          output$plot_score <- renderPlot({
+            ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
+              geom_line() +
+              geom_point(data = indivPlotdataObs, aes(x = temps, y = Valeur), color = "red") +
+              labs(title = paste("Graph du score de l'individu", input$id_select_score, "et ses valeurs observées"),
+                   x = "Temps", y = input$variable_acpf) +
+              theme_minimal()
+          })
+        } else {
+          output$plot_score <- renderPlot({
+            ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
+              geom_line() +
+              geom_line(data = indivPlotdataObs, aes(x = temps, y = Valeur), color = "red") +
+              labs(title = paste("Graph du score de l'individu ", input$id_select_score, " et valeurs observées"),
+                   x = "Temps", y = input$variable_acpf) +
+              theme_minimal()
+          })
+        }
+      } else {
+        print("Le type de jeu de données est sparse")
+      }
       
-      indivScore <- scores[as.numeric(indivPlot),] # necessite de mettre en place un index pour les identifiants de type string
-      indivScore_df <- as.data.frame(indivScore)
-      indivScore_df <- indivScore_df %>% mutate(temps = seq(1, n(), 1))
-      indivPlot_dataobs <- acpf_obj$data_obs[indivPlot]
-      indivPlotdataObs <- as.data.frame(indivPlot_dataobs)
-      names(indivPlotdataObs)[1] <- "Valeur"
-      indivPlotdataObs <- indivPlotdataObs %>% mutate(temps = seq(1, n(), 1))
-      # print(indivPlotdataObs)
-      output$plot_score <- renderPlot({
-        ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
-          geom_line() +
-          geom_point(data = indivPlotdataObs, aes(x = temps, y = Valeur), color = "red") +
-        theme_minimal()
-      })
     })
   }
   
   # Run the application 
   shinyApp(ui = ui, server = server)
-
-  
-# Erreur lors de la transposition. Une fois le jeu de données transposé et les graph tracés,
-# crash quand il y a détransposition ou quand l'on importe un autre df
