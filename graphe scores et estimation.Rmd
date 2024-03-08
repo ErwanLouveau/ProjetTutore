@@ -95,6 +95,58 @@ essayer d'utiliser une autre fonction que layout()
 vérifier si le flowlayout dans l'ui a une bonne syntaxe
 
 
+```{r Graphe cumulative PVE}
+library(tidyverse)
+library(DynForest)
+library(fdapace)
+library(JM)
+library(fda)
+
+#test avec cw
+
+data("CanadianWeather")
+data<- CanadianWeather
+
+acpf_data <- acpf(data, donnees = "dailyAv", variable = "Temperature.C", type="denseList")
+
+#cumPVE
+nb_CP = 4
+PVE <- data.frame(value = acpf_data$cumFVE * 100, name = paste0("CP", seq(1, nb_CP)))
+ggplot(PVE, aes(x=name, y=value)) + 
+  geom_bar(stat = "identity",
+           color = "grey",
+           fill = "lightblue") +
+  labs(x = "Composantes principales", y = "Pourcentage de variance cumulée")
+
+
+```
+
+```{r Test PVE Corentin}
+
+acpf_data <- acpf(data, donnees = "dailyAv", variable = "Temperature.C", type="denseList", n)
+PVEtest <- acpf_data$cumFVE
+
+# charger et preparer les donnees
+data(pbc2)
+pbc_list <- split(pbc2, f = pbc2$id)
+pbc_Ly <- lapply(pbc_list, function(x) return(x$albumin))
+pbc_Lt <- lapply(pbc_list, function(x) return(x$time))
+
+# fpca avec 20 composantes (le max autorisé par l'algo)
+fpca_20 <- FPCA(pbc_Ly, pbc_Lt, list(dataType = "Sparse", methodSelectK = as.integer(20)))
+fpca_20 <- FPCA(pbc2$serChol, pbc2$, list(dataType = "Sparse", methodSelectK = as.integer(20)))
+fpca_20$lambda # les 20 valeurs propres qui correspondent aux 20 composantes demandees (tu remarques qu'on arrive très vite à des valeurs propres quasi nulles qui n'expliquent plus grand chose)
+fpca_20$cumFVE # PVE cumulés
+cumsum(fpca_20$lambda)/sum(fpca_20$lambda) # on recacule les PVE à la main en faisant la somme cumulée des vp sur la somme des vp et on retombe et sur cumFVE
+
+# fpca avec 3 composantes
+fpca_3 <- FPCA(pbc_Ly, pbc_Lt, list(dataType = "Sparse", methodSelectK = as.integer(3)))
+fpca_3$lambda # les 3 valeurs propres qui correspondent aux 3 composantes demandees
+fpca_3$cumFVE # PVE cumulés
+cumsum(fpca_3$lambda)/sum(fpca_3$lambda) # l'algo ne calcule pas les PVE qu'avec ces 3 composantes
+cumsum(fpca_3$lambda)/sum(fpca_20$lambda) # mais il les calcule en utilisant toutes les valeurs propres (en tout cas le max autorisé par l'algo, 20 ici)
+```
+
 
 
 
