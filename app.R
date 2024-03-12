@@ -204,17 +204,18 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       updateSelectInput(session, "id", choices = var_names, selected = if (is.null(input$id)) var_names[1] else input$id)
       updateSelectInput(session, "time", choices = var_names, selected = var_names[1])
       
-      # LE BUG DES INDIVIDUS PROVIENT SUREMENT D'ICI. IL N'Y A AUCUNE VERIFICATION SI LES INDIVIDUS SELECTIONNES ONT DES DONNEES DANS LA VARIABLE SELECTIONNEE
+      # LE BUG DES INDIVIDUS PROVIENT SUREMENT D'ICI. IL N'Y A AUCUNE VERIFICATION SI LES INDIVIDUS SELECTIONNES ONT LE NBMIN DE DONNEES DANS LA VARIABLE SELECTIONNEE
+      
       if (!is.null(input$id) && input$id != ""){
-        
+
         # Impossible de savoir pourquoi ma variable_acpf reviens à la valeur par défaut A. CHAQUE. FOIS.
         # valid_data <- current_data[complete.cases(current_data[, input$variable_acpf]), ]
         # valid_id_select <- names(table(valid_data[, input$id]))[table(valid_data[, input$id]) >= 2]
         # print(valid_id_select)
-        
+
         # id_select <- valid_id_select
         # id_select_score <- valid_id_select
-        
+
         id_select <- unique(current_data[, input$id])
         id_select_score <- unique(current_data[, input$id])
         updateSelectInput(session, "id_select", choices = id_select, selected = id_select[1])
@@ -239,22 +240,24 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       acpfVar <- input$variable_acpf
       idVar <- input$id
       timeVar <- input$time
+      obsMin <- input$nbInput
       
       # Calcul de l'acpf avec la fonction selon le choix du nombre de CP ou du Threshold
       if (input$choix==1){
         nbcp <- input$nbCP
-        acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = 2, methode=nbcp)
+        acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = obsMin, methode=nbcp)
       } else {
         nb_threshold = input$PVE * 0.01
-        acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = 2, threshold = nb_threshold)
+        acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = obsMin, threshold = nb_threshold)
       }
       
       #SpaghettiPlot
-      # Impossible de faire sans !!sym. Impossible à expliquer
       idSelect <- input$id_select
-      data_spag <- filter(data_spag, !!sym(input$id) %in% idSelect)
+      data_spag <- data_spag %>% filter(.data[[input$id]] %in% idSelect)
+      # data_spag <- filter(data_spag, !!sym(input$id) %in% idSelect)
       output$plot_spag <- renderPlot({
-        ggplot(data_spag, aes(x=!!sym(input$time) ,y=!!sym(input$variable_acpf), group=!!sym(input$id), color = !!sym(input$id))) +
+        # ggplot(data_spag, aes(x=!!sym(input$time) ,y=!!sym(input$variable_acpf), group=!!sym(input$id), color = !!sym(input$id))) +
+        ggplot(data_spag, aes(x=.data[[input$time]],y=.data[[input$variable_acpf]], group=.data[[input$id]], color = .data[[input$id]])) +
           geom_line() +
           labs(title = paste("SpaghettiPlot représentant la", input$variable_acpf, "chez les individus sélectionnés"),
                x = input$time,
@@ -367,8 +370,8 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                  y = paste("Variation de ", input$variable_acpf),
                  color="CP") +
             ylim(min_y,max_y)+
-            theme_minimal()+
-            theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
+            theme_minimal()
+            # theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
         })
       }
       
