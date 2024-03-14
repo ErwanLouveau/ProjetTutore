@@ -136,12 +136,12 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                                          choices = NULL,multiple = F),
                              selectInput("variable_acpf", label = "Variable à observer",
                                          choices = NULL,multiple = F),
-                             selectInput("time", label = "Variable temps",
+                             selectInput("time", label = "Variable temps (de type numérique)",
                                          choices = NULL,multiple = F),
                              numericInput("nbInput",label="Nombre d'observation minimum pour intégrer un individu dans l'ACPF :", value = 2, min = 1 , step=1),
-                             selectInput("id_select", label = "Individu(s) sélectionné(s)",
+                             selectInput("id_select", label = "Individu(s) sélectionné(s) pour le spaghetti plot",
                                          choices = NULL,multiple = T), # Ensemble des individus selectionnés
-                             selectInput("id_select_score", label = "Individus sélectionné pour le calcul du score",
+                             selectInput("id_select_score", label = "Individus sélectionné pour le calcul des estimations individuelles",
                                          choices = NULL,multiple = F), # Ensemble des individus selectionnés pour le plot des estimation individuelles
                              radioButtons("choix", label="Affichage des Composantes Principales en fonction : ",choices = list("Nombre de CP :" = 1, "PVE" = 2),selected = 2),
                              conditionalPanel( # Choix entre le calcul par nombre de CP selectionnées ou par % de variance expliquée
@@ -152,12 +152,11 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                                condition = "input.choix == 2",
                                numericInput("PVE",label=" % de variances expliqué :", value = 99, min =50 , max = 100, step=0.01)
                              ),
-                             radioButtons("typeTrace", "Type de tracé",
+                             radioButtons("typeTrace", "Type de tracé pour les observations individuelles",
                                           choices = list("Etoiles" = "etoiles", "Ligne" = "ligne"),
                                           selected = "etoiles"
                              ),
-                             actionButton("plotButton", "Plot"),
-                             actionButton("selectAllButton", "Sélectionner tous les individus")
+                             actionButton("plotButton", "Plot")
                            ),
                            mainPanel(
                              fluidRow(
@@ -184,7 +183,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       if(input$oriente==T & tdc(donnees)==T){
         donnees <- read.csv(file$datapath, header = input$header)
         donnees <- donnees %>% 
-          pivot_longer(!colnames(donnees[1]), names_to = "ID", values_to = "Value")
+          pivot_longer(!colnames(donnees[1]), names_to = "ID", values_to = "Valeurs")
         }
       return(donnees)
     })
@@ -205,19 +204,32 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       updateSelectInput(session, "time", choices = var_names, selected = var_names[1])
       
       # LE BUG DES INDIVIDUS PROVIENT SUREMENT D'ICI. IL N'Y A AUCUNE VERIFICATION SI LES INDIVIDUS SELECTIONNES ONT LE NBMIN DE DONNEES DANS LA VARIABLE SELECTIONNEE
+            
+      # variable_select <- input$variable_acpf
+      # nom_var_id <- input$id
+      # variable_temps <- input$time
       
-      if (!is.null(input$id) && input$id != ""){
+      # if (!is.null(input$id) && input$id != ""){
+      if (input$id != ""){
 
-        # Impossible de savoir pourquoi ma variable_acpf reviens à la valeur par défaut A. CHAQUE. FOIS.
-        # valid_data <- current_data[complete.cases(current_data[, input$variable_acpf]), ]
-        # valid_id_select <- names(table(valid_data[, input$id]))[table(valid_data[, input$id]) >= 2]
-        # print(valid_id_select)
+        
+        # current_data_bis <- current_data %>% select(variable_temps, variable_select, nom_var_id) %>% 
+        #   filter(!is.na(variable_select))
+        # print(current_data_bis)
+        # 
+        # id_select <- unique(current_data_bis[,nom_var_id])
+        # 
+        # updateSelectInput(session, "id_select", choices = id_select, selected = id_select[1])
+        # updateSelectInput(session, "id_select_score", choices = id_select)
+        
 
-        # id_select <- valid_id_select
-        # id_select_score <- valid_id_select
-
-        id_select <- unique(current_data[, input$id])
-        id_select_score <- unique(current_data[, input$id])
+        # current_data_bis <- current_data %>% select()
+        
+        # print(current_data[which(is.null(current_data[variable_select])==F), input$id])
+        
+      
+        id_select <- unique(current_data[,input$id])
+        id_select_score <- unique(current_data[,input$id])
         updateSelectInput(session, "id_select", choices = id_select, selected = id_select[1])
         updateSelectInput(session, "id_select_score", choices = id_select_score)
       }
@@ -254,15 +266,14 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       #SpaghettiPlot
       idSelect <- input$id_select
       data_spag <- data_spag %>% filter(.data[[input$id]] %in% idSelect)
-      # data_spag <- filter(data_spag, !!sym(input$id) %in% idSelect)
       output$plot_spag <- renderPlot({
-        # ggplot(data_spag, aes(x=!!sym(input$time) ,y=!!sym(input$variable_acpf), group=!!sym(input$id), color = !!sym(input$id))) +
         ggplot(data_spag, aes(x=.data[[input$time]],y=.data[[input$variable_acpf]], group=.data[[input$id]], color = .data[[input$id]])) +
           geom_line() +
-          labs(title = paste("SpaghettiPlot représentant la", input$variable_acpf, "chez les individus sélectionnés"),
-               x = input$time,
+          labs(title = paste("SpaghettiPlot représentant", input$variable_acpf, "chez les individus sélectionnés"),
+               x = "Temps",
                y = input$variable_acpf,
                color="Individus") +
+          guides(color = F) +
           theme_minimal()
       })
       
@@ -273,7 +284,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
         ggplot(acpf_mu_df, aes(x = temps, y = mu)) +
           geom_line() +
           labs(title = "Fonction moyenne de l'ACPF sur l'ensemble des individus", 
-               x = "Temps", y = sprintf("mu de la variable %s", input$variable_acpf)) +
+               x = "Temps", y="Moyenne") +
           theme_minimal()
       })
       
@@ -318,7 +329,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
           ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
             geom_line() +
             geom_point(data = dfObs, aes(x = temps, y = obs), color = "red") +
-            labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", input$id_select_score, "et ses valeurs observées"),
+            labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", input$id_select_score, "\net ses valeurs observées"),
                   x = "Temps", y = input$variable_acpf) +
             theme_minimal()
         })
@@ -327,7 +338,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
           ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
             geom_line() +
             geom_line(data = dfObs, aes(x = temps, y = obs), color = "red") +
-            labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", input$id_select_score, " et valeurs observées"),
+            labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", input$id_select_score, "\net valeurs observées"),
                  x = "Temps", y = input$variable_acpf) +
             theme_minimal()
         })
@@ -347,9 +358,9 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       phi <- as.data.frame(phi)
 
       if (input$choix==1){
-        phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:(as.numeric(nbcp)+1)], names_to = "CP")
+        phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:(as.numeric(nbcp)+1)], names_to = "CP", values_to = "Valeurs")
         output$plot_phi <- renderPlot({
-          ggplot(phi_pivoter, aes(x=temps ,y=value, group=CP, color = CP)) +
+          ggplot(phi_pivoter, aes(x=temps ,y=Valeurs, group=CP, color = CP)) +
             geom_line() +
             labs(title ="Diagramme représentant les composantes principales",
                  x = "Temps",
@@ -361,9 +372,9 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
             # theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5), plot.caption = element_text(size = 13, hjust =0))
         })
       } else {
-        phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:ncol(phi)], names_to = "CP")
+        phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:ncol(phi)], names_to = "CP", values_to = "Valeurs")
         output$plot_phi <- renderPlot({
-          ggplot(phi_pivoter, aes(x=temps ,y=value, group=CP, color = CP)) +
+          ggplot(phi_pivoter, aes(x=temps ,y=Valeurs, group=CP, color = CP)) +
             geom_line() +
             labs(title = paste("Diagramme représentant les composantes principales"),
                  x = "Temps",
@@ -386,10 +397,10 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       head(df_varExp_PVE)
 
       output$plot_varExpPVE <- renderPlot({
-        ggplot(df_varExp_PVE, aes(x = CP, y = varExp)) +
+        ggplot(df_varExp_PVE, aes(x = factor(CP, levels = unique(CP)), y = varExp)) +
           geom_bar(stat = "identity", fill="steelblue") +
-          geom_line(aes(x = CP, y = pve, group=1), color = "black") +
-          geom_point(aes(x = CP, y = pve), shape=1, color = "black", size = 2) +
+          geom_line(aes(x = factor(CP, levels = unique(CP)), y = pve, group=1), color = "black") +
+          geom_point(aes(x = factor(CP, levels = unique(CP)), y = pve), shape=1, color = "black", size = 2) +
           labs(title = paste("Graph des variances expliquées par les composantes principales et tracé de la fréquence cumulée de variation expliquée"),
                x = "Composantes principales",
                y = "Variance expliquée") +
