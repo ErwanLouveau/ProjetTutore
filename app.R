@@ -112,6 +112,8 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                              # Si le jeu de données est mal orienté
                              checkboxInput("oriente", "Les noms de colonnes sont t-il en première ligne ? Si oui le jeu de données
                              sera automatiquement ré-orienté",value = FALSE),
+                             selectInput("id", label = "Variable identifiant",
+                                         choices = NULL,multiple = F),
                              # variables présentes dans le jeu de données à transformer
                              selectInput("variable",label = "Variables à transformer en facteur",
                                          choices = NULL,multiple = T),
@@ -132,8 +134,8 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                 tabPanel("ACPF",
                          sidebarLayout(
                            sidebarPanel(
-                             selectInput("id", label = "Variable identifiant",
-                                         choices = NULL,multiple = F),
+                             # selectInput("id", label = "Variable identifiant",
+                             #             choices = NULL,multiple = F),
                              selectInput("variable_acpf", label = "Variable à observer",
                                          choices = NULL,multiple = F),
                              selectInput("time", label = "Variable temps (de type numérique)",
@@ -207,7 +209,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       if (!is.null(input$id) && input$id != ""){
         observe({
           current_data_bis <- data.frame(id = current_data[[input$id]], temps = current_data[[input$time]], variable = current_data[[input$variable_acpf]])
-          current_data_bis <- current_data_bis %>% group_by(id) %>% filter(all(sum(!is.na(variable)) >= 2))
+          current_data_bis <- current_data_bis %>% group_by(id) %>% filter(all(sum(!is.na(variable)) >= input$nbInput))
 
           observe({
             id_select <- unique(current_data_bis$id)
@@ -292,61 +294,73 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
           theme_minimal()
       })
       
-      # EN RECONSTRUCTION
       
       # ScorePlot
-      #   # Acpf calculée sur l'ensemble des individus et non sur les individus sélectionnés
-      # scores <- acpf_obj$acpf$xiEst %*% t(acpf_obj$acpf$phi) + matrix(rep(acpf_obj$acpf$mu, times = length(acpf_obj$data_obs)), nrow = length(acpf_obj$data_obs), byrow = TRUE)
-      # # Créer un index qui permet d'attribuer un numero à chaque identifiant de la variable id selectionnée. Peut importe si l'id est numeric, factor ou character
-      # liste_id <- sort(unique(data_acpf[[idVar]]))
-      # liste_id_df <- as.data.frame(liste_id)
-      # liste_id_df <- liste_id_df %>% mutate(id_num = seq(1, n(), 1))
-      # position <- which(liste_id_df$liste_id %in% input$id_select_score)
-      # indivPlot <- liste_id_df[position, "id_num"]
-      # 
-      # # Nom des variables selon le type de la variable en entrée
-      # if (is.numeric(data_acpf[[idVar]])==T){
-      #   nomV = paste0("X",indivPlot)
-      # } else {
-      #   nomV = input$id_select_score
-      # }
-      # # Prendre les t tels que Y(t) soit non manquant
-      # # print(as.data.frame(acpf_obj$acpf$inputData$Ly[indivPlot]))
-      # Obs <- as.data.frame(acpf_obj$acpf$inputData$Ly[indivPlot]) %>% rename(obs = nomV)
-      # if (IsRegular(data_acpf)=="Sparse"){
-      #   Time <- as.data.frame(acpf_obj$acpf$inputData$Lt[indivPlot]) %>% rename(temps = nomV)
-      # } else {
-      #   Time <- as.data.frame(acpf_obj$acpf$workGrid)
-      #   names(Time)[1] <- "temps"
-      # }
-      # dfObs <- cbind(Obs, Time) # données observées avec leur temps
-      # 
-      # # Prendre les scores de l'individu selectionné
-      # indivScore <- scores[as.numeric(indivPlot),]
-      # indivScore_df <- as.data.frame(indivScore)
-      # temps_score_df <- acpf_obj$acpf$workGrid
-      # indivScore_df <- indivScore_df %>% mutate(temps = temps_score_df)
-      # 
-      #   # Plot en fonction du type de point choisi
-      # if (input$typeTrace == "etoiles"){
-      #   output$plot_score <- renderPlot({
-      #     ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
-      #       geom_line() +
-      #       geom_point(data = dfObs, aes(x = temps, y = obs), color = "red") +
-      #       labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", input$id_select_score, "\net ses valeurs observées"),
-      #             x = "Temps", y = input$variable_acpf) +
-      #       theme_minimal()
-      #   })
-      # } else {
-      #   output$plot_score <- renderPlot({
-      #     ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
-      #       geom_line() +
-      #       geom_line(data = dfObs, aes(x = temps, y = obs), color = "red") +
-      #       labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", input$id_select_score, "\net valeurs observées"),
-      #            x = "Temps", y = input$variable_acpf) +
-      #       theme_minimal()
-      #   })
-      # }
+      scores <- acpf_obj$acpf$xiEst %*% t(acpf_obj$acpf$phi) + matrix(rep(acpf_obj$acpf$mu, times = length(acpf_obj$data_obs)), nrow = length(acpf_obj$data_obs), byrow = TRUE)
+      
+      # Récuperer la liste des identifiants selon le type de jeu de données
+      # Leur attribuer un index
+      
+      if (IsRegular(data())!="Sparse"){
+        liste_id <- sort(unique(data()[[idVar]]))
+        print("Non sparse")
+        
+        liste_id_df <- as.data.frame(liste_id)
+        liste_id_df <- liste_id_df %>% mutate(index = seq(1, n(), 1))
+        
+        indivPlot <- liste_id_df %>% filter(liste_id==input$id_select_score)
+        indivPlot <- indivPlot$index
+        print(indivPlot)
+        print(class(indivPlot))
+      } else {
+        print("sparse")
+        
+        data_index <- data_frame(id = sort(unique(data()[[idVar]])))
+        data_index <- data_index %>% mutate(index = seq(1, n(), 1))
+        data_estim <- data.frame(id = data()[[input$id]], temps = data()[[input$time]]) %>% mutate(variable = data()[[input$variable_acpf]])
+        data_estim <- left_join(data_estim, data_index)
+        data_estim <- data_estim %>% group_by(id) %>% filter(all(sum(!is.na(variable)) >= input$nbInput))
+        liste_id_df <- data_estim %>% select(id, index) %>% distinct(id, index ,.keep_all = TRUE)
+
+        indivPlot <- liste_id_df %>% filter(id==input$id_select_score)
+        indivPlot <- indivPlot$index
+        print(indivPlot)
+        print(class(indivPlot))
+      }
+      
+      # Prendre les t tels que Y(t) soit non manquant
+      dfObs <- data.frame(acpf_obj$acpf$inputData$Ly[indivPlot], acpf_obj$acpf$inputData$Lt[indivPlot])
+      names(dfObs)[1] <- "Obs"
+      names(dfObs)[2] <- "Time"
+      print(dfObs)
+      
+      # Prendre les scores de l'individu selectionné
+      indivScore <- scores[as.numeric(indivPlot),]
+      indivScore_df <- as.data.frame(indivScore)
+      temps_score_df <- acpf_obj$acpf$workGrid
+      indivScore_df <- indivScore_df %>% mutate(temps = temps_score_df)
+        
+      # Plot en fonction du type de point choisi
+      if (input$typeTrace == "etoiles"){
+        output$plot_score <- renderPlot({
+          ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
+            geom_line() +
+            geom_point(data = dfObs, aes(x = Time, y = Obs), color = "red") +
+            labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", input$id_select_score, "\net ses valeurs observées"),
+                  x = "Temps", y = input$variable_acpf) +
+            theme_minimal()
+        })
+      } else {
+        output$plot_score <- renderPlot({
+          ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
+            geom_line() +
+            geom_line(data = dfObs, aes(x = Time, y = Obs), color = "red") +
+            labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", input$id_select_score, "\net valeurs observées"),
+                 x = "Temps", y = input$variable_acpf) +
+            theme_minimal()
+        })
+      }
+
       
       
       # PhiPlot
