@@ -8,6 +8,8 @@ library(skimr)
 library(dplyr)
 library(tidyverse)
 library(fdapace)
+library(knitr)
+library(kableExtra)
 
 
 # 2 - FONCTIONS NECESSAIRES A L'APPLICATION
@@ -106,8 +108,8 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                          sidebarLayout(
                            sidebarPanel(
                              # jeu de données
-                             fileInput("file1", "Choose csv File", accept = ".csv"),
-                             checkboxInput("header", "Header", TRUE),
+                             fileInput("file1", "Choisir un fichier csv", accept = ".csv", buttonLabel = "Parcourir...", placeholder = "Aucun fichier sélectionné",),
+                             checkboxInput("header", "Noms de colonnes en première ligne ?", TRUE),
                              # Nom d'une première colonne ?
                              # Si le jeu de données est mal orienté
                              checkboxInput("oriente", "Les noms de colonnes sont t-il en première ligne ? Si oui le jeu de données
@@ -120,11 +122,11 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                            ),
                            mainPanel(
                              tabsetPanel(
-                               tabPanel("Data validation",
+                               tabPanel("Validation des données",
                                         # visualisation du jeu de données
                                         dataTableOutput("dataframe")
                                ),
-                               tabPanel("Data visualisation", 
+                               tabPanel("Visualisation des données", 
                                         tableOutput("test")
                                )
                              )
@@ -148,7 +150,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                              radioButtons("choix", label="Affichage des Composantes Principales en fonction : ",choices = list("Nombre de CP :" = 1, "PVE" = 2),selected = 2),
                              conditionalPanel( # Choix entre le calcul par nombre de CP selectionnées ou par % de variance expliquée
                                condition = "input.choix == 1",
-                               numericInput("nbCP",label="Nombre de CP :", value = 3, min = 1, max = 6)
+                               numericInput("nbCP",label="Nombre de CP :", value = 3, min = 1, max = 20)
                              ),
                              conditionalPanel(
                                condition = "input.choix == 2",
@@ -158,7 +160,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                                           choices = list("Etoiles" = "etoiles", "Ligne" = "ligne"),
                                           selected = "etoiles"
                              ),
-                             actionButton("plotButton", "Plot")
+                             actionButton("plotButton", "Tracer")
                            ),
                            mainPanel(
                              fluidRow(
@@ -170,7 +172,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                                column(12, plotOutput("plot_contrib_individu"))) # Plot des contribution de chaque CP à la projection d'un individu
                            )
                          )
-      )
+      ) # commencer ici pour ajouter des boutons Langues
     )
   )
   
@@ -245,10 +247,45 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
     # visualisation des données
     output$test <- renderTable({
       data2 <- data() %>% 
-        mutate_at(input$variable, as.factor)
+        mutate_at(input$variable, as.factor) 
+      
+      df1 <- skim(data2)
+      if (any(grepl("factor", df1$skim_type))) {
+        df1 <- df1 %>% dplyr::select(-factor.ordered) %>% 
+          rename(Unique = factor.n_unique) %>% 
+          rename("Observation(s) la(les) plus fréquente(s)" = factor.top_counts)
+      }
+      if (any(grepl("numeric", df1$skim_type))) {
+        df1 <- df1 %>% dplyr::select(-c(numeric.p25, numeric.p75)) %>% 
+          rename(Moyenne = numeric.mean) %>% 
+          rename("Ecart-type" = numeric.sd) %>% 
+          rename(Minimum = numeric.p0) %>% 
+          rename(Mediane = numeric.p50) %>% 
+          rename(Maximum = numeric.p100) %>% 
+          rename(Histogramme = numeric.hist)
+      }
+      if (any(grepl("character", df1$skim_type))) {
+        df1 <- df1 %>% dplyr::select(-c(character.min, character.max, character.empty, character.n_unique)) %>% 
+          rename(Espace = character.whitespace)
+      }
+      # print(df1$skim_type)
+      df2 <- na_person(data2,input$id)
+      
+      df1 <- df1 %>% 
+        rename(Variable = skim_variable) %>% 
+        rename(Type = skim_type) %>% 
+        rename("Donnees manquantes" = n_missing) %>% 
+        rename("Taux de données manquantes" = complete_rate)
+      
+      df2 <- df2 %>%
+        rename(Variable = skim_variable) %>% 
+        rename("Nombre de donnees manquantes minimum par individu" = na_per_pers_min) %>%
+        rename("Nombre de donnees manquantes maximum par individu" = na_per_pers_max) %>%
+        rename("Nombre médian de donnees manquantes par individu" = na_per_pers_med) %>%
+        rename("Nombre moyen de donnees manquantes par individu" = na_per_pers_moy)
       
       # merge les stats les deux fonctions pour les stats g et les na par personne
-      merge(skim(data2), na_person(data2,input$id), by.x = "skim_variable")
+      merge(df1, df2, by.x = "Variable")
     })
     
     #plot
