@@ -76,6 +76,9 @@ test2 <- data.frame(
   value = acpf_cw_temperature$xiEst[selected_indiv,]              #les 4 col pour l'indiv sélectionné
   )
 
+# Pour inclure que les CP qu'on veut dans le graphe
+test2 <- test2[1:nbmaxcp, ]
+
 # Barplot
 ggplot(test2, aes(x=name, y=value)) + 
   geom_bar(stat = "identity",
