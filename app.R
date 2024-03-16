@@ -112,8 +112,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                              checkboxInput("header", "Noms de colonnes en première ligne ?", TRUE),
                              # Nom d'une première colonne ?
                              # Si le jeu de données est mal orienté
-                             checkboxInput("oriente", "Les noms de colonnes sont t-il en première ligne ? Si oui le jeu de données
-                             sera automatiquement ré-orienté",value = FALSE),
+                             checkboxInput("oriente", "Pivoter le jeu de données",value = FALSE),
                              selectInput("id", label = "Variable identifiant",
                                          choices = NULL,multiple = F),
                              # variables présentes dans le jeu de données à transformer
@@ -252,7 +251,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       df1 <- skim(data2)
       if (any(grepl("factor", df1$skim_type))) {
         df1 <- df1 %>% dplyr::select(-factor.ordered) %>% 
-          rename(Unique = factor.n_unique) %>% 
+          rename("Nombre de modalités" = factor.n_unique) %>% 
           rename("Observation(s) la(les) plus fréquente(s)" = factor.top_counts)
       }
       if (any(grepl("numeric", df1$skim_type))) {
@@ -275,7 +274,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
         rename(Variable = skim_variable) %>% 
         rename(Type = skim_type) %>% 
         rename("Donnees manquantes" = n_missing) %>% 
-        rename("Taux de données manquantes" = complete_rate)
+        rename("Taux de données présentes" = complete_rate)
       
       df2 <- df2 %>%
         rename(Variable = skim_variable) %>% 
