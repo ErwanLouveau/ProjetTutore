@@ -166,7 +166,8 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                                column(6, plotOutput("plot_mu")), # Plot de mu
                                column(6, plotOutput("plot_score")), # Plot des estimations individuelles
                                column(6, plotOutput("plot_phi")), # Plot des composantes principales
-                               column(12, plotOutput("plot_varExpPVE"))) 
+                               column(12, plotOutput("plot_varExpPVE")), # Plot des variances expliquées par chaque CP
+                               column(12, plotOutput("plot_contrib_individu"))) # Plot des contribution de chaque CP à la projection d'un individu
                            )
                          )
       )
@@ -258,15 +259,15 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       acpfVar <- input$variable_acpf
       idVar <- input$id
       timeVar <- input$time
-      obsMin <- input$nbInput
+      obsMax <- input$nbInput
       
       # Calcul de l'acpf avec la fonction selon le choix du nombre de CP ou du Threshold
       if (input$choix==1){
         nbcp <- input$nbCP
-        acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = obsMin, methode=nbcp)
+        acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = obsMax, methode=nbcp)
       } else {
         nb_threshold = input$PVE * 0.01
-        acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = obsMin, threshold = nb_threshold)
+        acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = obsMax, threshold = nb_threshold)
       }
       
       #SpaghettiPlot
@@ -303,17 +304,17 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       
       if (IsRegular(data())!="Sparse"){
         liste_id <- sort(unique(data()[[idVar]]))
-        print("Non sparse")
+        # print("Non sparse")
         
         liste_id_df <- as.data.frame(liste_id)
         liste_id_df <- liste_id_df %>% mutate(index = seq(1, n(), 1))
         
         indivPlot <- liste_id_df %>% filter(liste_id==input$id_select_score)
         indivPlot <- indivPlot$index
-        print(indivPlot)
-        print(class(indivPlot))
+        # print(indivPlot)
+        # print(class(indivPlot))
       } else {
-        print("sparse")
+        # print("sparse")
         
         data_index <- data_frame(id = sort(unique(data()[[idVar]])))
         data_index <- data_index %>% mutate(index = seq(1, n(), 1))
@@ -324,15 +325,15 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
 
         indivPlot <- liste_id_df %>% filter(id==input$id_select_score)
         indivPlot <- indivPlot$index
-        print(indivPlot)
-        print(class(indivPlot))
+        # print(indivPlot)
+        # print(class(indivPlot))
       }
       
       # Prendre les t tels que Y(t) soit non manquant
       dfObs <- data.frame(acpf_obj$acpf$inputData$Ly[indivPlot], acpf_obj$acpf$inputData$Lt[indivPlot])
       names(dfObs)[1] <- "Obs"
       names(dfObs)[2] <- "Time"
-      print(dfObs)
+      # print(dfObs)
       
       # Prendre les scores de l'individu selectionné
       indivScore <- scores[as.numeric(indivPlot),]
@@ -416,12 +417,30 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
 
       output$plot_varExpPVE <- renderPlot({
         ggplot(df_varExp_PVE, aes(x = factor(CP, levels = unique(CP)), y = varExp)) +
-          geom_bar(stat = "identity", fill="steelblue") +
+          geom_bar(stat = "identity", fill="lightblue") +
           geom_line(aes(x = factor(CP, levels = unique(CP)), y = pve, group=1), color = "black") +
           geom_point(aes(x = factor(CP, levels = unique(CP)), y = pve), shape=1, color = "black", size = 2) +
-          labs(title = paste("Graph des variances expliquées par les composantes principales et tracé de la fréquence cumulée de variation expliquée"),
+          labs(title = "Graph des variances expliquées par les composantes principales et tracé de la fréquence cumulée de variation expliquée",
                x = "Composantes principales",
                y = "Variance expliquée") +
+          theme_minimal()
+      })
+      
+      # PlotContribIndividu
+      data_contrib <- data.frame(name = c(colnames(as.data.frame(acpf_obj$acpf$xiEst))), 
+                                 value = acpf_obj$acpf$xiEst[indivPlot,])
+      data_contrib <- data_contrib[1:obsMax,]
+      
+      output$plot_contrib_individu <- renderPlot ({
+        ggplot(data_contrib, aes(x=name, y=value)) + 
+          geom_bar(stat = "identity",
+                   color = "grey",
+                   fill = "lightblue") +
+          
+          coord_cartesian(ylim = c(min(acpf_obj$acpf$xiEst[,]),max(acpf_obj$acpf$xiEst[,])),#min et max en fonction du min et du max général
+                          xlim = c(1,obsMax)) +
+          labs(title = paste("Graph des contributions de chaque CP à la projection de l'individu :", input$id_select_score),
+               x = "Composantes principales", y = "Coefficient associé") +
           theme_minimal()
       })
     })
