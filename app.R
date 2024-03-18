@@ -10,6 +10,7 @@ library(tidyverse)
 library(fdapace)
 library(knitr)
 library(kableExtra)
+library(emoji)
 
 
 # 2 - FONCTIONS NECESSAIRES A L'APPLICATION
@@ -101,9 +102,16 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
   return(list(acpf = acpf_, data_obs = data_Ly, time = data_Lt))
 }
 
+
+
 # 3 - APPLICATION
   # UI
-  ui <- fluidPage(
+  ui <- fluidPage(title="APP ACPF",
+    includeCSS(file.path("www", "custom_icon.css")),
+    headerPanel(fluidRow(
+      actionButton("flag_fr",label = "",icon = icon(name = NULL,class = "custom_icon")),
+      actionButton("flag_uk",label = "",icon = icon(name = NULL,class = "custom_icon2"))
+    )),
     tabsetPanel(tabPanel("Importation et visualisation des données",
                          sidebarLayout(
                            sidebarPanel(
@@ -194,6 +202,10 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
     output$dataframe <- renderDataTable({
       data()
     })
+    
+    # observeEvent(input$flag_fr, {
+    #   
+    # })
     # modifie l'input variable
     observe({
       current_data <- data()
