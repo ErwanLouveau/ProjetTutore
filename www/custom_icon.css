@@ -1,0 +1,24 @@
+.custom_icon {
+  background: url("fr.svg");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  height: 32px;
+  width: 32px;
+  display: block;
+}
+
+.custom_icon2 {
+  background: url("uk.svg");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  height: 32px;
+  width: 32px;
+  display: block;
+}
+  
+  /* #home {
+    font-size: 32px;
+    line-height: 0;
+  } */
