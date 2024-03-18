@@ -109,7 +109,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                            sidebarPanel(
                              # jeu de données
                              fileInput("file1", "Choisir un fichier csv", accept = ".csv", buttonLabel = "Parcourir...", placeholder = "Aucun fichier sélectionné",),
-                             checkboxInput("header", "Noms de colonnes en première ligne ?", TRUE),
+                             checkboxInput("header", "La première ligne contient-elle les noms de colonne ?", TRUE),
                              # Nom d'une première colonne ?
                              # Si le jeu de données est mal orienté
                              checkboxInput("oriente", "Pivoter le jeu de données",value = FALSE),
@@ -137,7 +137,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                            sidebarPanel(
                              # selectInput("id", label = "Variable identifiant",
                              #             choices = NULL,multiple = F),
-                             selectInput("variable_acpf", label = "Variable à observer",
+                             selectInput("variable_acpf", label = "Variable d'intérêt",
                                          choices = NULL,multiple = F),
                              selectInput("time", label = "Variable temps (de type numérique)",
                                          choices = NULL,multiple = F),
@@ -146,7 +146,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                                          choices = NULL,multiple = T), # Ensemble des individus selectionnés
                              selectInput("id_select_score", label = "Individus sélectionné pour le calcul des estimations individuelles",
                                          choices = NULL,multiple = F), # Ensemble des individus selectionnés pour le plot des estimation individuelles
-                             radioButtons("choix", label="Affichage des Composantes Principales en fonction : ",choices = list("Nombre de CP :" = 1, "PVE" = 2),selected = 2),
+                             radioButtons("choix", label="Calcul de l'ACPF selon le : ",choices = list("Nombre de CP :" = 1, "PVE" = 2),selected = 2),
                              conditionalPanel( # Choix entre le calcul par nombre de CP selectionnées ou par % de variance expliquée
                                condition = "input.choix == 1",
                                numericInput("nbCP",label="Nombre de CP :", value = 3, min = 1, max = 20)
@@ -156,10 +156,10 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                                numericInput("PVE",label=" % de variances expliqué :", value = 99, min =50 , max = 100, step=0.01)
                              ),
                              radioButtons("typeTrace", "Type de tracé pour les observations individuelles",
-                                          choices = list("Etoiles" = "etoiles", "Ligne" = "ligne"),
+                                          choices = list("Ponctuel" = "etoiles", "Ligne" = "ligne"),
                                           selected = "etoiles"
                              ),
-                             actionButton("plotButton", "Tracer")
+                             actionButton("plotButton", "C'est parti !")
                            ),
                            mainPanel(
                              fluidRow(
@@ -264,8 +264,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
           rename(Histogramme = numeric.hist)
       }
       if (any(grepl("character", df1$skim_type))) {
-        df1 <- df1 %>% dplyr::select(-c(character.min, character.max, character.empty, character.n_unique)) %>% 
-          rename(Espace = character.whitespace)
+        df1 <- df1 %>% dplyr::select(-c(character.min, character.max, character.empty, character.n_unique, character.whitespace))
       }
       # print(df1$skim_type)
       df2 <- na_person(data2,input$id)
@@ -342,11 +341,11 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
         liste_id <- sort(unique(data()[[idVar]]))
         # print("Non sparse")
         
-        liste_id_df <- as.data.frame(liste_id)
+        liste_id_df <- data.frame(id = liste_id)
         liste_id_df <- liste_id_df %>% mutate(index = seq(1, n(), 1))
         
-        indivPlot <- liste_id_df %>% filter(liste_id==input$id_select_score)
-        indivPlot <- indivPlot$index
+        indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
+        indivPlot <- indivPlotdf$index
         # print(indivPlot)
         # print(class(indivPlot))
       } else {
@@ -357,39 +356,73 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
         data_estim <- data.frame(id = data()[[input$id]], temps = data()[[input$time]]) %>% mutate(variable = data()[[input$variable_acpf]])
         data_estim <- left_join(data_estim, data_index)
         data_estim <- data_estim %>% group_by(id) %>% filter(all(sum(!is.na(variable)) >= input$nbInput))
-        liste_id_df <- data_estim %>% select(id, index) %>% distinct(id, index ,.keep_all = TRUE)
+        liste_id_df <- data_estim %>% dplyr::select(id, index) %>% distinct(id, index ,.keep_all = TRUE)
 
-        indivPlot <- liste_id_df %>% filter(id==input$id_select_score)
-        indivPlot <- indivPlot$index
+        indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
+        indivPlot <- indivPlotdf$index
         # print(indivPlot)
         # print(class(indivPlot))
       }
       
       # Prendre les t tels que Y(t) soit non manquant
-      dfObs <- data.frame(acpf_obj$acpf$inputData$Ly[indivPlot], acpf_obj$acpf$inputData$Lt[indivPlot])
+      if (is.numeric(indivPlotdf$id)==T){
+        indivPlotStr <- as.character(indivPlot)
+      } else {
+        indivPlotStr <- indivPlotdf$id
+      }
+      print(indivPlotStr)
+      dfObs <- data.frame(acpf_obj$acpf$inputData$Ly[[indivPlotStr]], acpf_obj$acpf$inputData$Lt[[indivPlotStr]])
       names(dfObs)[1] <- "Obs"
       names(dfObs)[2] <- "Time"
       # print(dfObs)
       
+      # debug <- data.frame(id = data()[[input$id]], variable = data()[[input$variable_acpf]], time = data()[[input$time]])
+      # if (IsRegular(data())!="Sparse"){
+      #   debug <- debug %>% filter(id == indivPlotdf$id)
+      # } else {
+      #   debug <- debug %>% filter(id == indivPlotdf$id)
+      # }
+      # print(debug)
+      # 
+      # print(acpf_obj$acpf$inputData$Ly[[indivPlotStr]])
+      
       # Prendre les scores de l'individu selectionné
-      indivScore <- scores[as.numeric(indivPlot),]
-      indivScore_df <- as.data.frame(indivScore)
-      temps_score_df <- acpf_obj$acpf$workGrid
-      indivScore_df <- indivScore_df %>% mutate(temps = temps_score_df)
+      # print(scores)
+      indivSelect <- data.frame(id = data()[[input$id]])
+      indivSelect <- indivSelect %>% filter(id %in% input$id_select) 
+      indivSelect_id <- sort(unique(indivSelect$id))
+      # print(indivSelect_id)
+      newIndex <- data.frame(id = indivSelect_id) %>% mutate(index = seq(1, n(), 1))
+      # print(newIndex)
+      newIndex <- newIndex %>% filter(id==input$id_select_score)
+      indivPlot2 <- newIndex$index
+      if (is.numeric(newIndex$id)==T){
+        indivPlotStr2 <- as.character(indivPlot2)
+      } else {
+        indivPlotStr2 <- newIndex$index
+      }
+      # print(indivPlotStr2)
+      
+      indivScore2 <- scores[as.numeric(indivPlotStr2),]
+      # print(indivScore2)
+      indivScore_df2 <- as.data.frame(indivScore2)
+      temps_score_df2 <- acpf_obj$acpf$workGrid
+      indivScore_df2 <- indivScore_df2 %>% mutate(temps = temps_score_df2)
+      # print(indivScore_df2)
         
       # Plot en fonction du type de point choisi
       if (input$typeTrace == "etoiles"){
         output$plot_score <- renderPlot({
-          ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
+          ggplot(indivScore_df2, aes(x = temps, y = indivScore2)) +
             geom_line() +
-            geom_point(data = dfObs, aes(x = Time, y = Obs), color = "red") +
+            geom_point(data = dfObs, aes(x = Time, y = Obs), color = "red", shape=4, size = 1) +
             labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", input$id_select_score, "\net ses valeurs observées"),
                   x = "Temps", y = input$variable_acpf) +
             theme_minimal()
         })
       } else {
         output$plot_score <- renderPlot({
-          ggplot(indivScore_df, aes(x = temps, y = indivScore)) +
+          ggplot(indivScore_df2, aes(x = temps, y = indivScore2)) +
             geom_line() +
             geom_line(data = dfObs, aes(x = Time, y = Obs), color = "red") +
             labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", input$id_select_score, "\net valeurs observées"),
@@ -462,19 +495,22 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
           theme_minimal()
       })
       
-      # PlotContribIndividu
-      data_contrib <- data.frame(name = c(colnames(as.data.frame(acpf_obj$acpf$xiEst))), 
-                                 value = acpf_obj$acpf$xiEst[indivPlot,])
-      data_contrib <- data_contrib[1:obsMax,]
+      print(acpf_obj$acpf$xiEst)
       
+      # PlotContribIndividu
+      data_contrib <- data.frame(name = c(colnames(as.data.frame(acpf_obj$acpf$xiEst))),
+                                 value = acpf_obj$acpf$xiEst[indivPlot2,])
+      print(data_contrib)
+      data_contrib <- data_contrib[1:acpf_obj$acpf$selectK,]
+
       output$plot_contrib_individu <- renderPlot ({
-        ggplot(data_contrib, aes(x=name, y=value)) + 
+        ggplot(data_contrib, aes(x=name, y=value)) +
           geom_bar(stat = "identity",
                    color = "grey",
                    fill = "lightblue") +
-          
+
           coord_cartesian(ylim = c(min(acpf_obj$acpf$xiEst[,]),max(acpf_obj$acpf$xiEst[,])),#min et max en fonction du min et du max général
-                          xlim = c(1,obsMax)) +
+                          xlim = c(1,acpf_obj$acpf$selectK)) +
           labs(title = paste("Graph des contributions de chaque CP à la projection de l'individu :", input$id_select_score),
                x = "Composantes principales", y = "Coefficient associé") +
           theme_minimal()
