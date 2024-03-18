@@ -10,7 +10,7 @@ library(tidyverse)
 library(fdapace)
 library(knitr)
 library(kableExtra)
-library(emoji)
+library(shinydashboard)
 
 
 # 2 - FONCTIONS NECESSAIRES A L'APPLICATION
@@ -102,89 +102,133 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
   return(list(acpf = acpf_, data_obs = data_Ly, time = data_Lt))
 }
 
-
-
 # 3 - APPLICATION
   # UI
-  ui <- fluidPage(title="APP ACPF",
-    includeCSS(file.path("www", "custom_icon.css")),
-    headerPanel(fluidRow(
-      actionButton("flag_fr",label = "",icon = icon(name = NULL,class = "custom_icon")),
-      actionButton("flag_uk",label = "",icon = icon(name = NULL,class = "custom_icon2"))
-    )),
-    tabsetPanel(tabPanel("Importation et visualisation des données",
-                         sidebarLayout(
-                           sidebarPanel(
-                             # jeu de données
-                             fileInput("file1", "Choisir un fichier csv", accept = ".csv", buttonLabel = "Parcourir...", placeholder = "Aucun fichier sélectionné",),
-                             checkboxInput("header", "La première ligne contient-elle les noms de colonne ?", TRUE),
-                             # Nom d'une première colonne ?
-                             # Si le jeu de données est mal orienté
-                             checkboxInput("oriente", "Pivoter le jeu de données",value = FALSE),
-                             selectInput("id", label = "Variable identifiant",
-                                         choices = NULL,multiple = F),
-                             # variables présentes dans le jeu de données à transformer
-                             selectInput("variable",label = "Variables à transformer en facteur",
-                                         choices = NULL,multiple = T),
-                           ),
-                           mainPanel(
-                             tabsetPanel(
-                               tabPanel("Validation des données",
-                                        # visualisation du jeu de données
-                                        dataTableOutput("dataframe")
-                               ),
-                               tabPanel("Visualisation des données", 
-                                        tableOutput("test")
+  ui <- dashboardPage(title = "Acpf app",skin = "black",
+    dashboardHeader(title = tags$a(href='http://www.isped.u-bordeaux.fr/',
+                                           tags$img(src='isped.png', height="90%", width="90%")),
+                    tags$li(
+                      class = "dropdown",
+                      actionButton("flag_fr", label = "", icon = icon(name = NULL, class = "custom_icon")),
+                      actionButton("flag_uk", label = "", icon = icon(name = NULL, class = "custom_icon2")),
+                      tags$script("$(document).ready(function() { 
+                    $('#flag_fr').parent().addClass('dropdown-toggle');
+                    $('#flag_fr').parent().attr('data-toggle', 'dropdown'); 
+                  });")
+                    )),
+    dashboardSidebar(disable=TRUE),
+    dashboardBody(
+      style = "height: 95vh; overflow-y: auto;",
+      tags$head(tags$style(HTML('
+        .content-wrapper {
+          background-color: #fff;
+        }
+      '
+      ))),
+      includeCSS(file.path("www", "custom_icon.css")),
+      ui <- fluidPage(#title="APP ACPF",
+                      # includeCSS(file.path("www", "custom_icon.css")),
+                      # headerPanel(fluidRow(
+                      #   actionButton("flag_fr",label = "",icon = icon(name = NULL,class = "custom_icon")),
+                      #   actionButton("flag_uk",label = "",icon = icon(name = NULL,class = "custom_icon2"))
+                      # )),
+                      tabsetPanel(tabPanel("Importation et visualisation des données",
+                                           sidebarLayout(
+                                             sidebarPanel(
+                                               # jeu de données
+                                               fileInput("file1", "Choisir un fichier csv", accept = ".csv", buttonLabel = "Parcourir...", placeholder = "Aucun fichier sélectionné",),
+                                               checkboxInput("header", "La première ligne contient-elle les noms de colonne ?", TRUE),
+                                               # Nom d'une première colonne ?
+                                               # Si le jeu de données est mal orienté
+                                               checkboxInput("oriente", "Pivoter le jeu de données",value = FALSE),
+                                               selectInput("id", label = "Variable identifiant",
+                                                           choices = NULL,multiple = F),
+                                               # variables présentes dans le jeu de données à transformer
+                                               selectInput("variable",label = "Variables à transformer en facteur",
+                                                           choices = NULL,multiple = T),
+                                             ),
+                                             mainPanel(
+                                               tabsetPanel(
+                                                 tabPanel("Validation des données",
+                                                          # visualisation du jeu de données
+                                                          dataTableOutput("dataframe")
+                                                 ),
+                                                 tabPanel("Visualisation des données",
+                                                          tableOutput("test")
+                                                 )
+                                               )
+                                             )
+                                           )
+                      ),
+                      tabPanel("ACPF",
+                               sidebarLayout(
+                                 sidebarPanel(
+                                   # selectInput("id", label = "Variable identifiant",
+                                   #             choices = NULL,multiple = F),
+                                   selectInput("variable_acpf", label = "Variable d'intérêt",
+                                               choices = NULL,multiple = F),
+                                   selectInput("time", label = "Variable temps (de type numérique)",
+                                               choices = NULL,multiple = F),
+                                   numericInput("nbInput",label="Nombre d'observation minimum pour intégrer un individu dans l'ACPF :", value = 2, min = 1 , step=1),
+                                   selectInput("id_select", label = "Individu(s) sélectionné(s) pour le spaghetti plot",
+                                               choices = NULL,multiple = T), # Ensemble des individus selectionnés
+                                   selectInput("id_select_score", label = "Individus sélectionné pour le calcul des estimations individuelles",
+                                               choices = NULL,multiple = F), # Ensemble des individus selectionnés pour le plot des estimation individuelles
+                                   radioButtons("choix", label="Calcul de l'ACPF selon le : ",choices = list("Nombre de CP :" = 1, "PVE" = 2),selected = 2),
+                                   conditionalPanel( # Choix entre le calcul par nombre de CP selectionnées ou par % de variance expliquée
+                                     condition = "input.choix == 1",
+                                     numericInput("nbCP",label="Nombre de CP :", value = 3, min = 1, max = 20)
+                                   ),
+                                   conditionalPanel(
+                                     condition = "input.choix == 2",
+                                     numericInput("PVE",label=" % de variances expliqué :", value = 99, min =50 , max = 100, step=0.01)
+                                   ),
+                                   radioButtons("typeTrace", "Type de tracé pour les observations individuelles",
+                                                choices = list("Ponctuel" = "etoiles", "Ligne" = "ligne"),
+                                                selected = "etoiles"
+                                   ),
+                                   actionButton("plotButton", "C'est parti !")
+                                 ),
+                                 mainPanel(
+                                   fluidRow(
+                                     column(6, plotOutput("plot_spag")), # SpaghettiPlot
+                                     column(6, plotOutput("plot_mu")), # Plot de mu
+                                     column(6, plotOutput("plot_score")), # Plot des estimations individuelles
+                                     column(6, plotOutput("plot_phi")), # Plot des composantes principales
+                                     column(12, plotOutput("plot_varExpPVE")), # Plot des variances expliquées par chaque CP
+                                     column(12, plotOutput("plot_contrib_individu"))) # Plot des contribution de chaque CP à la projection d'un individu
+                                 )
                                )
-                             )
-                           )
-                         )
-      ),
-                tabPanel("ACPF",
-                         sidebarLayout(
-                           sidebarPanel(
-                             # selectInput("id", label = "Variable identifiant",
-                             #             choices = NULL,multiple = F),
-                             selectInput("variable_acpf", label = "Variable d'intérêt",
-                                         choices = NULL,multiple = F),
-                             selectInput("time", label = "Variable temps (de type numérique)",
-                                         choices = NULL,multiple = F),
-                             numericInput("nbInput",label="Nombre d'observation minimum pour intégrer un individu dans l'ACPF :", value = 2, min = 1 , step=1),
-                             selectInput("id_select", label = "Individu(s) sélectionné(s) pour le spaghetti plot",
-                                         choices = NULL,multiple = T), # Ensemble des individus selectionnés
-                             selectInput("id_select_score", label = "Individus sélectionné pour le calcul des estimations individuelles",
-                                         choices = NULL,multiple = F), # Ensemble des individus selectionnés pour le plot des estimation individuelles
-                             radioButtons("choix", label="Calcul de l'ACPF selon le : ",choices = list("Nombre de CP :" = 1, "PVE" = 2),selected = 2),
-                             conditionalPanel( # Choix entre le calcul par nombre de CP selectionnées ou par % de variance expliquée
-                               condition = "input.choix == 1",
-                               numericInput("nbCP",label="Nombre de CP :", value = 3, min = 1, max = 20)
-                             ),
-                             conditionalPanel(
-                               condition = "input.choix == 2",
-                               numericInput("PVE",label=" % de variances expliqué :", value = 99, min =50 , max = 100, step=0.01)
-                             ),
-                             radioButtons("typeTrace", "Type de tracé pour les observations individuelles",
-                                          choices = list("Ponctuel" = "etoiles", "Ligne" = "ligne"),
-                                          selected = "etoiles"
-                             ),
-                             actionButton("plotButton", "C'est parti !")
-                           ),
-                           mainPanel(
-                             fluidRow(
-                               column(6, plotOutput("plot_spag")), # SpaghettiPlot
-                               column(6, plotOutput("plot_mu")), # Plot de mu
-                               column(6, plotOutput("plot_score")), # Plot des estimations individuelles
-                               column(6, plotOutput("plot_phi")), # Plot des composantes principales
-                               column(12, plotOutput("plot_varExpPVE")), # Plot des variances expliquées par chaque CP
-                               column(12, plotOutput("plot_contrib_individu"))) # Plot des contribution de chaque CP à la projection d'un individu
-                           )
-                         )
-      ) # commencer ici pour ajouter des boutons Langues
-    )
+                      ) # commencer ici pour ajouter des boutons Langues
+                      )
+      ) #,
+      # uiOutput("app_content")
+      )
   )
+
+
   
   # SERVER
   server <- function(input, output, session) {
+    # # Réactive pour suivre la langue sélectionnée
+    # language <- reactiveVal("fr")  # Par défaut, la langue est le français
+    # # Observer pour mettre à jour la langue lorsque les boutons sont cliqués
+    # observeEvent(input$flag_fr, {
+    #   language("fr")
+    # })
+    # observeEvent(input$flag_uk, {
+    #   language("uk")
+    # })
+    # 
+    # output$app_content <- renderUI({
+    #   if (language() == "fr") {
+    #     tags$p("Contenu en français")
+    #     
+    #   } else if (language() == "uk") {
+    #     tags$p("Content in English")
+    #   }
+    # })
+    
     # créer un jeu de données réactive
     data <- reactive({
       file <- input$file1
@@ -202,10 +246,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
     output$dataframe <- renderDataTable({
       data()
     })
-    
-    # observeEvent(input$flag_fr, {
-    #   
-    # })
+
     # modifie l'input variable
     observe({
       current_data <- data()
