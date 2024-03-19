@@ -326,31 +326,61 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       updateSelectInput(session, "variable_acpf", choices = var_names_num, selected = var_names_num[1])
       updateSelectInput(session, "time", choices = var_names, selected = var_names[1])
       
-      # Nouvelle version
-      if (!is.null(input$id) && input$id != ""){
-        observe({
-          current_data_bis <- data.frame(id = current_data[[input$id]], temps = current_data[[input$time]], variable = current_data[[input$variable_acpf]])
-          current_data_bis <- current_data_bis %>% group_by(id) %>% filter(all(sum(!is.na(variable)) >= input$nbInput))
-
+      lang <- language()
+      if (lang == "fr"){
+        if (!is.null(input$id) && input$id != ""){
           observe({
-            id_select <- unique(current_data_bis$id)
-            if ("tous" %in% input$id_select) {
-              ind <- current_data_bis$id# Tous les individus
-            } else if ("aucun" %in% input$id_select){
-              ind<-NULL
-            }else {
-              ind <- input$id_select  # Individus spécifiquement sélectionnés
-            }
+            current_data_bis <- data.frame(id = current_data[[input$id]], temps = current_data[[input$time]], variable = current_data[[input$variable_acpf]])
+            current_data_bis <- current_data_bis %>% group_by(id) %>% filter(all(sum(!is.na(variable)) >= input$nbInput))
             
-              
             observe({
-              updateSelectInput(session, "id_select", choices = c(tous="tous",aucun="aucun",id_select), selected = ind)
-              # updateSelectInput(session, "id_select", choices = id_select) #, selected = id_select[1])
-              updateSelectInput(session, "id_select_score", choices = id_select)
+              id_select <- unique(current_data_bis$id)
+              if ("tous" %in% input$id_select) {
+                ind <- current_data_bis$id# Tous les individus
+              } else if ("aucun" %in% input$id_select){
+                ind<-NULL
+              }else {
+                ind <- input$id_select  # Individus spécifiquement sélectionnés
+              }
+              
+              
+              observe({
+                updateSelectInput(session, "id_select", choices = c(tous="tous",aucun="aucun",id_select), selected = ind)
+                # updateSelectInput(session, "id_select", choices = id_select) #, selected = id_select[1])
+                updateSelectInput(session, "id_select_score", choices = id_select)
+              })
             })
           })
-        })
+        }
+      } else {
+        if (!is.null(input$id) && input$id != ""){
+          observe({
+            current_data_bis <- data.frame(id = current_data[[input$id]], temps = current_data[[input$time]], variable = current_data[[input$variable_acpf]])
+            current_data_bis <- current_data_bis %>% group_by(id) %>% filter(all(sum(!is.na(variable)) >= input$nbInput))
+            
+            observe({
+              id_select <- unique(current_data_bis$id)
+              if ("all" %in% input$id_select) {
+                ind <- current_data_bis$id# Tous les individus
+              } else if ("none" %in% input$id_select){
+                ind<-NULL
+              }else {
+                ind <- input$id_select  # Individus spécifiquement sélectionnés
+              }
+              
+              
+              observe({
+                updateSelectInput(session, "id_select", choices = c(all="all",none="none",id_select), selected = ind)
+                # updateSelectInput(session, "id_select", choices = id_select) #, selected = id_select[1])
+                updateSelectInput(session, "id_select_score", choices = id_select)
+              })
+            })
+          })
+        }
       }
+      
+      # Nouvelle version
+      
       
       # Ancienne version
       # if (!is.null(input$id) && input$id != ""){
