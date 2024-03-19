@@ -309,7 +309,9 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
     
     output$dataframe <- renderDataTable({
       data()
-    })
+    },
+    options = list(
+      dom = 'Blfrtip'))
 
     # modifie l'input variable
     observe({
@@ -661,7 +663,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
          print(acpf_obj$acpf$xiEst)
          
          # PlotContribIndividu
-         data_contrib <- data.frame(name = c(colnames(as.data.frame(acpf_obj$acpf$xiEst))),
+         data_contrib <- data.frame(name = paste0("CP", seq_len(ncol(acpf_obj$acpf$xiEst))),
                                     value = acpf_obj$acpf$xiEst[indivPlot2,])
          print(data_contrib)
          data_contrib <- data_contrib[1:acpf_obj$acpf$selectK,]
@@ -871,8 +873,11 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
          print(acpf_obj$acpf$xiEst)
          
          # PlotContribIndividu
-         data_contrib <- data.frame(name = c(colnames(as.data.frame(acpf_obj$acpf$xiEst))),
+         # data_contrib <- data.frame(name = c(colnames(as.data.frame(acpf_obj$acpf$xiEst))),
+         #                            value = acpf_obj$acpf$xiEst[indivPlot2,])
+         data_contrib <- data.frame(name = paste0("CP", seq_len(ncol(acpf_obj$acpf$xiEst))),
                                     value = acpf_obj$acpf$xiEst[indivPlot2,])
+         
          print(data_contrib)
          data_contrib <- data_contrib[1:acpf_obj$acpf$selectK,]
          
