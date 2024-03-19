@@ -11,6 +11,8 @@ library(fdapace)
 library(knitr)
 library(kableExtra)
 library(shinydashboard)
+library(shinyjs)
+library(shinyalert)
 
 
 # 2 - FONCTIONS NECESSAIRES A L'APPLICATION
@@ -122,20 +124,22 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       )
   )
 
+# Réactive pour suivre la langue sélectionnée
+language <- reactiveVal("fr")  # Par défaut, la langue est le français
 
-  
   # SERVER
   server <- function(input, output, session) {
-    # Réactive pour suivre la langue sélectionnée
-    language <- reactiveVal("fr")  # Par défaut, la langue est le français
+
     # Observer pour mettre à jour la langue lorsque les boutons sont cliqués
     observeEvent(input$flag_fr, {
+      # observe({language <- reactiveVal("fr")})
+      session$reload()
       language("fr")
-      print(language())
     })
     observeEvent(input$flag_uk, {
+      # observe({language <- reactiveVal("uk")})
+      session$reload()
       language("uk")
-      print(language())
     })
     
     output$content <- renderUI({
@@ -187,7 +191,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
                            ),
                            conditionalPanel(
                              condition = "input.choix == 2",
-                             numericInput("PVE", label = " % de variances expliqué :", value = 99, min = 50 , max = 100, step = 0.01)
+                             numericInput("PVE", label = " % de variance expliquée :", value = 99, min = 50 , max = 100, step = 0.01)
                            ),
                            radioButtons("typeTrace", "Type de tracé pour les observations individuelles",
                                         choices = list("Ponctuel" = "etoiles", "Ligne" = "ligne"),
@@ -325,6 +329,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       updateSelectInput(session, "time", choices = var_names, selected = var_names[1])
       
       lang <- language()
+      
       if (lang == "fr"){
         if (!is.null(input$id) && input$id != ""){
           observe({
@@ -476,451 +481,473 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
       }
     })
     
-    
     #plot
     observeEvent(input$plotButton, { # ObserveEvent qui permet de recalculer tout son contenu quand le bouton Plot est utilisé
+      lang <- language()
       data_spag <- data() # jeu de données qui sert au plot du SpaghettiPlot
       
       data_acpf <- data() # jeu de données qui sert a l'ACPF
       acpfVar <- input$variable_acpf
       idVar <- input$id
       timeVar <- input$time
-      obsMax <- input$nbInput
+      obsMin <- input$nbInput
       
-      # Calcul de l'acpf avec la fonction selon le choix du nombre de CP ou du Threshold
-      if (input$choix==1){
-        nbcp <- input$nbCP
-        acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = obsMax, methode=nbcp)
+      
+      if (!is.numeric(data_acpf[[timeVar]]) && !is.integer(data_acpf[[timeVar]]) && !is.factor(data_acpf[[timeVar]])){
+        if (lang=="fr"){
+          shinyalert("Erreur", "La variable temps n'est pas numérique", type = "error")
+        } else {
+          shinyalert("Error", "The time variable is not numerical", type = "error")
+        }
       } else {
-        nb_threshold = input$PVE * 0.01
-        acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = obsMax, threshold = nb_threshold)
-      }
-      
-      lang <- language()
-       if (lang == "fr"){
-         #SpaghettiPlot
-         idSelect <- input$id_select
-         data_spag <- data_spag %>% filter(.data[[input$id]] %in% idSelect)
-         output$plot_spag <- renderPlot({
-           ggplot(data_spag, aes(x=.data[[input$time]],y=.data[[input$variable_acpf]], group=.data[[input$id]], color = .data[[input$id]])) +
-             geom_line() +
-             labs(title = paste("SpaghettiPlot représentant", input$variable_acpf, "chez les individus sélectionnés"),
-                  x = "Temps",
-                  y = input$variable_acpf,
-                  color="Individus") +
-             guides(color = F) +
-             theme_minimal()
-         })
-         
-         # MuPlot
-         acpf_mu_df <- as.data.frame(acpf_obj$acpf$mu) %>% rename(mu = 'acpf_obj$acpf$mu')
-         acpf_mu_df <- acpf_mu_df %>% mutate(temps =acpf_obj$acpf$workGrid) #mutate(temps = seq(1, n(), 1))
-         output$plot_mu <- renderPlot({
-           ggplot(acpf_mu_df, aes(x = temps, y = mu)) +
-             geom_line() +
-             labs(title = "Fonction moyenne de l'ACPF sur l'ensemble des individus", 
-                  x = "Temps", y="Moyenne") +
-             theme_minimal()
-         })
-         
-         
-         # ScorePlot
-         scores <- acpf_obj$acpf$xiEst %*% t(acpf_obj$acpf$phi) + matrix(rep(acpf_obj$acpf$mu, times = length(acpf_obj$data_obs)), nrow = length(acpf_obj$data_obs), byrow = TRUE)
-         
-         # Récuperer la liste des identifiants selon le type de jeu de données
-         # Leur attribuer un index
-         
-         if (IsRegular(data())!="Sparse"){
-           liste_id <- sort(unique(data()[[idVar]]))
-           # print("Non sparse")
-           
-           liste_id_df <- data.frame(id = liste_id)
-           liste_id_df <- liste_id_df %>% mutate(index = seq(1, n(), 1))
-           
-           indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
-           indivPlot <- indivPlotdf$index
-           # print(indivPlot)
-           # print(class(indivPlot))
-         } else {
-           # print("sparse")
-           
-           data_index <- data_frame(id = sort(unique(data()[[idVar]])))
-           data_index <- data_index %>% mutate(index = seq(1, n(), 1))
-           data_estim <- data.frame(id = data()[[input$id]], temps = data()[[input$time]]) %>% mutate(variable = data()[[input$variable_acpf]])
-           data_estim <- left_join(data_estim, data_index)
-           data_estim <- data_estim %>% group_by(id) %>% filter(all(sum(!is.na(variable)) >= input$nbInput))
-           liste_id_df <- data_estim %>% dplyr::select(id, index) %>% distinct(id, index ,.keep_all = TRUE)
-           
-           indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
-           indivPlot <- indivPlotdf$index
-           # print(indivPlot)
-           # print(class(indivPlot))
-         }
-         
-         # Prendre les t tels que Y(t) soit non manquant
-         if (is.numeric(indivPlotdf$id)==T){
-           indivPlotStr <- as.character(indivPlot)
-         } else {
-           indivPlotStr <- indivPlotdf$id
-         }
-         print(indivPlotStr)
-         dfObs <- data.frame(acpf_obj$acpf$inputData$Ly[[indivPlotStr]], acpf_obj$acpf$inputData$Lt[[indivPlotStr]])
-         names(dfObs)[1] <- "Obs"
-         names(dfObs)[2] <- "Time"
-         # print(dfObs)
-         
-         # debug <- data.frame(id = data()[[input$id]], variable = data()[[input$variable_acpf]], time = data()[[input$time]])
-         # if (IsRegular(data())!="Sparse"){
-         #   debug <- debug %>% filter(id == indivPlotdf$id)
-         # } else {
-         #   debug <- debug %>% filter(id == indivPlotdf$id)
-         # }
-         # print(debug)
-         # 
-         # print(acpf_obj$acpf$inputData$Ly[[indivPlotStr]])
-         
-         # Prendre les scores de l'individu selectionné
-         # print(scores)
-         indivSelect <- data.frame(id = data()[[input$id]])
-         indivSelect <- indivSelect %>% filter(id %in% input$id_select) 
-         indivSelect_id <- sort(unique(indivSelect$id))
-         # print(indivSelect_id)
-         newIndex <- data.frame(id = indivSelect_id) %>% mutate(index = seq(1, n(), 1))
-         # print(newIndex)
-         newIndex <- newIndex %>% filter(id==input$id_select_score)
-         indivPlot2 <- newIndex$index
-         if (is.numeric(newIndex$id)==T){
-           indivPlotStr2 <- as.character(indivPlot2)
-         } else {
-           indivPlotStr2 <- newIndex$index
-         }
-         # print(indivPlotStr2)
-         
-         indivScore2 <- scores[as.numeric(indivPlotStr2),]
-         # print(indivScore2)
-         indivScore_df2 <- as.data.frame(indivScore2)
-         temps_score_df2 <- acpf_obj$acpf$workGrid
-         indivScore_df2 <- indivScore_df2 %>% mutate(temps = temps_score_df2)
-         # print(indivScore_df2)
-         
-         # Plot en fonction du type de point choisi
-         if (input$typeTrace == "etoiles"){
-           output$plot_score <- renderPlot({
-             ggplot(indivScore_df2, aes(x = temps, y = indivScore2)) +
-               geom_line() +
-               geom_point(data = dfObs, aes(x = Time, y = Obs), color = "red", shape=4, size = 1) +
-               labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", input$id_select_score, "\net ses valeurs observées"),
-                    x = "Temps", y = input$variable_acpf) +
-               theme_minimal()
-           })
-         } else {
-           output$plot_score <- renderPlot({
-             ggplot(indivScore_df2, aes(x = temps, y = indivScore2)) +
-               geom_line() +
-               geom_line(data = dfObs, aes(x = Time, y = Obs), color = "red") +
-               labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", input$id_select_score, "\net valeurs observées"),
-                    x = "Temps", y = input$variable_acpf) +
-               theme_minimal()
-           })
-         }
-         
-         
-         
-         # PhiPlot
-         # Chercher les valeurs minimum de l'acpf avec paramètres par défaut
-         acpf_ylim <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar)
-         min_y<-min(acpf_ylim$acpf$phi)
-         max_y<-max(acpf_ylim$acpf$phi)
-         
-         # Stocker les valeurs des composantes principales de l'acpf calculée
-         phi <- acpf_obj$acpf$phi
-         colnames(phi) <-1:ncol(phi)
-         phi <- cbind("temps"=1:nrow(phi),phi)
-         phi <- as.data.frame(phi)
-         
-         if (input$choix==1){
-           phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:(as.numeric(nbcp)+1)], names_to = "CP", values_to = "Valeurs")
-           output$plot_phi <- renderPlot({
-             ggplot(phi_pivoter, aes(x=temps ,y=Valeurs, group=CP, color = CP)) +
-               geom_line() +
-               labs(title ="Diagramme représentant les composantes principales",
-                    x = "Temps",
-                    y = paste("Variation de ", input$variable_acpf),
-                    color="CP",
-                    caption=paste("Le pourcentage de variance expliquée est de ", round(acpf_obj$acpf$FVE*100,2), "%.")) +
-               ylim(min_y,max_y)+
-               theme_minimal()
-             # theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5), plot.caption = element_text(size = 13, hjust =0))
-           })
-         } else {
-           phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:ncol(phi)], names_to = "CP", values_to = "Valeurs")
-           output$plot_phi <- renderPlot({
-             ggplot(phi_pivoter, aes(x=temps ,y=Valeurs, group=CP, color = CP)) +
-               geom_line() +
-               labs(title = paste("Diagramme représentant les composantes principales"),
-                    x = "Temps",
-                    y = paste("Variation de ", input$variable_acpf),
-                    color="CP") +
-               ylim(min_y,max_y)+
-               theme_minimal()
-             # theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
-           })
-         }
-         
-         # PlotVarExpPVE
-         variances_expliquee <- as.data.frame(acpf_obj$acpf$lambda/sum(acpf_obj$acpf$lambda))
-         names(variances_expliquee)[1] <- "varExp"
-         pve <- as.data.frame(acpf_obj$acpf$cumFVE)
-         names(pve)[1] <- "pve"
-         composante <- as.data.frame(row.names(variances_expliquee))
-         names(composante)[1] <- "CP"
-         df_varExp_PVE <- cbind(composante, variances_expliquee, pve)
-         head(df_varExp_PVE)
-         
-         output$plot_varExpPVE <- renderPlot({
-           ggplot(df_varExp_PVE, aes(x = factor(CP, levels = unique(CP)), y = varExp)) +
-             geom_bar(stat = "identity", fill="lightblue") +
-             geom_line(aes(x = factor(CP, levels = unique(CP)), y = pve, group=1), color = "black") +
-             geom_point(aes(x = factor(CP, levels = unique(CP)), y = pve), shape=1, color = "black", size = 2) +
-             labs(title = "Graph des variances expliquées par les composantes principales et tracé de la fréquence cumulée de variation expliquée",
-                  x = "Composantes principales",
-                  y = "Variance expliquée") +
-             theme_minimal()
-         })
-         
-         print(acpf_obj$acpf$xiEst)
-         
-         # PlotContribIndividu
-         data_contrib <- data.frame(name = paste0("CP", seq_len(ncol(acpf_obj$acpf$xiEst))),
-                                    value = acpf_obj$acpf$xiEst[indivPlot2,])
-         print(data_contrib)
-         data_contrib <- data_contrib[1:acpf_obj$acpf$selectK,]
-         
-         output$plot_contrib_individu <- renderPlot ({
-           ggplot(data_contrib, aes(x=name, y=value)) +
-             geom_bar(stat = "identity",
-                      color = "grey",
-                      fill = "lightblue") +
-             
-             coord_cartesian(ylim = c(min(acpf_obj$acpf$xiEst[,]),max(acpf_obj$acpf$xiEst[,])),#min et max en fonction du min et du max général
-                             xlim = c(1,acpf_obj$acpf$selectK)) +
-             labs(title = paste("Graph des contributions de chaque CP à la projection de l'individu :", input$id_select_score),
-                  x = "Composantes principales", y = "Coefficient associé") +
-             theme_minimal()
-         })
-       } else {
-         #SpaghettiPlot
-         idSelect <- input$id_select
-         data_spag <- data_spag %>% filter(.data[[input$id]] %in% idSelect)
-         output$plot_spag <- renderPlot({
-           ggplot(data_spag, aes(x=.data[[input$time]], y=.data[[input$variable_acpf]], group=.data[[input$id]], color = .data[[input$id]])) +
-             geom_line() +
-             labs(title = paste("SpaghettiPlot representing", input$variable_acpf, "among selected individuals"),
-                  x = "Time",
-                  y = input$variable_acpf,
-                  color = "Individuals") +
-             guides(color = FALSE) +
-             theme_minimal()
-         })
-         
-         # MuPlot
-         acpf_mu_df <- as.data.frame(acpf_obj$acpf$mu) %>% rename(mu = 'acpf_obj$acpf$mu')
-         acpf_mu_df <- acpf_mu_df %>% mutate(temps =acpf_obj$acpf$workGrid) #mutate(temps = seq(1, n(), 1))
-         output$plot_mu <- renderPlot({
-           ggplot(acpf_mu_df, aes(x = temps, y = mu)) +
-             geom_line() +
-             labs(title = "Mean function of ACPF across all individuals",
-                  x = "Time", y = "Mean") +
-             theme_minimal()
-         })
-         
-         
-         # ScorePlot
-         scores <- acpf_obj$acpf$xiEst %*% t(acpf_obj$acpf$phi) + matrix(rep(acpf_obj$acpf$mu, times = length(acpf_obj$data_obs)), nrow = length(acpf_obj$data_obs), byrow = TRUE)
-         
-         # Récuperer la liste des identifiants selon le type de jeu de données
-         # Leur attribuer un index
-         
-         if (IsRegular(data())!="Sparse"){
-           liste_id <- sort(unique(data()[[idVar]]))
-           # print("Non sparse")
-           
-           liste_id_df <- data.frame(id = liste_id)
-           liste_id_df <- liste_id_df %>% mutate(index = seq(1, n(), 1))
-           
-           indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
-           indivPlot <- indivPlotdf$index
-           # print(indivPlot)
-           # print(class(indivPlot))
-         } else {
-           # print("sparse")
-           
-           data_index <- data_frame(id = sort(unique(data()[[idVar]])))
-           data_index <- data_index %>% mutate(index = seq(1, n(), 1))
-           data_estim <- data.frame(id = data()[[input$id]], temps = data()[[input$time]]) %>% mutate(variable = data()[[input$variable_acpf]])
-           data_estim <- left_join(data_estim, data_index)
-           data_estim <- data_estim %>% group_by(id) %>% filter(all(sum(!is.na(variable)) >= input$nbInput))
-           liste_id_df <- data_estim %>% dplyr::select(id, index) %>% distinct(id, index ,.keep_all = TRUE)
-           
-           indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
-           indivPlot <- indivPlotdf$index
-           # print(indivPlot)
-           # print(class(indivPlot))
-         }
-         
-         # Prendre les t tels que Y(t) soit non manquant
-         if (is.numeric(indivPlotdf$id)==T){
-           indivPlotStr <- as.character(indivPlot)
-         } else {
-           indivPlotStr <- indivPlotdf$id
-         }
-         print(indivPlotStr)
-         dfObs <- data.frame(acpf_obj$acpf$inputData$Ly[[indivPlotStr]], acpf_obj$acpf$inputData$Lt[[indivPlotStr]])
-         names(dfObs)[1] <- "Obs"
-         names(dfObs)[2] <- "Time"
-         # print(dfObs)
-         
-         # debug <- data.frame(id = data()[[input$id]], variable = data()[[input$variable_acpf]], time = data()[[input$time]])
-         # if (IsRegular(data())!="Sparse"){
-         #   debug <- debug %>% filter(id == indivPlotdf$id)
-         # } else {
-         #   debug <- debug %>% filter(id == indivPlotdf$id)
-         # }
-         # print(debug)
-         # 
-         # print(acpf_obj$acpf$inputData$Ly[[indivPlotStr]])
-         
-         # Prendre les scores de l'individu selectionné
-         # print(scores)
-         indivSelect <- data.frame(id = data()[[input$id]])
-         indivSelect <- indivSelect %>% filter(id %in% input$id_select) 
-         indivSelect_id <- sort(unique(indivSelect$id))
-         # print(indivSelect_id)
-         newIndex <- data.frame(id = indivSelect_id) %>% mutate(index = seq(1, n(), 1))
-         # print(newIndex)
-         newIndex <- newIndex %>% filter(id==input$id_select_score)
-         indivPlot2 <- newIndex$index
-         if (is.numeric(newIndex$id)==T){
-           indivPlotStr2 <- as.character(indivPlot2)
-         } else {
-           indivPlotStr2 <- newIndex$index
-         }
-         # print(indivPlotStr2)
-         
-         indivScore2 <- scores[as.numeric(indivPlotStr2),]
-         # print(indivScore2)
-         indivScore_df2 <- as.data.frame(indivScore2)
-         temps_score_df2 <- acpf_obj$acpf$workGrid
-         indivScore_df2 <- indivScore_df2 %>% mutate(temps = temps_score_df2)
-         # print(indivScore_df2)
-         
-         # Plot en fonction du type de point choisi
-         if (input$typeTrace == "etoiles") {
-           output$plot_score <- renderPlot({
-             ggplot(indivScore_df2, aes(x = temps, y = indivScore2)) +
-               geom_line() +
-               geom_point(data = dfObs, aes(x = Time, y = Obs), color = "red", shape=4, size = 1) +
-               labs(title = paste("Graph of individual estimates of the function of individual", input$id_select_score, "\nand its observed values"),
-                    x = "Time", y = input$variable_acpf) +
-               theme_minimal()
-           })
-         } else {
-           output$plot_score <- renderPlot({
-             ggplot(indivScore_df2, aes(x = temps, y = indivScore2)) +
-               geom_line() +
-               geom_line(data = dfObs, aes(x = Time, y = Obs), color = "red") +
-               labs(title = paste("Graph of individual estimates of the function of individual", input$id_select_score, "\nand observed values"),
-                    x = "Time", y = input$variable_acpf) +
-               theme_minimal()
-           })
-         }
-         
-         
-         
-         # PhiPlot
-         # Chercher les valeurs minimum de l'acpf avec paramètres par défaut
-         acpf_ylim <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar)
-         min_y<-min(acpf_ylim$acpf$phi)
-         max_y<-max(acpf_ylim$acpf$phi)
-         
-         # Stocker les valeurs des composantes principales de l'acpf calculée
-         phi <- acpf_obj$acpf$phi
-         colnames(phi) <-1:ncol(phi)
-         phi <- cbind("temps"=1:nrow(phi),phi)
-         phi <- as.data.frame(phi)
-         
-         if (input$choix==1){
-           phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:(as.numeric(nbcp)+1)], names_to = "CP", values_to = "Valeurs")
-           output$plot_phi <- renderPlot({
-             ggplot(phi_pivoter, aes(x = temps, y = Valeurs, group = CP, color = CP)) +
-               geom_line() +
-               labs(title = "Diagram representing the principal components",
-                    x = "Time",
-                    y = paste("Variation of", input$variable_acpf),
-                    color = "CP",
-                    caption = paste("The percentage of explained variance is", round(acpf_obj$acpf$FVE * 100, 2), "%.")) +
-               ylim(min_y, max_y) +
-               theme_minimal()
-           })
-         } else {
-           phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:ncol(phi)], names_to = "CP", values_to = "Valeurs")
-           output$plot_phi <- renderPlot({
-             ggplot(phi_pivoter, aes(x=temps ,y=Valeurs, group=CP, color = CP)) +
-               geom_line() +
-               labs(title = paste("Diagram representing the principal components"),
-                    x = "Time",
-                    y = paste("Variation of ", input$variable_acpf),
-                    color="CP") +
-               ylim(min_y,max_y)+
-               theme_minimal()
-             # theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
-           })
-         }
-         
-         # PlotVarExpPVE
-         variances_expliquee <- as.data.frame(acpf_obj$acpf$lambda/sum(acpf_obj$acpf$lambda))
-         names(variances_expliquee)[1] <- "varExp"
-         pve <- as.data.frame(acpf_obj$acpf$cumFVE)
-         names(pve)[1] <- "pve"
-         composante <- as.data.frame(row.names(variances_expliquee))
-         names(composante)[1] <- "CP"
-         df_varExp_PVE <- cbind(composante, variances_expliquee, pve)
-         head(df_varExp_PVE)
-         
-         output$plot_varExpPVE <- renderPlot({
-           ggplot(df_varExp_PVE, aes(x = factor(CP, levels = unique(CP)), y = varExp)) +
-             geom_bar(stat = "identity", fill = "lightblue") +
-             geom_line(aes(x = factor(CP, levels = unique(CP)), y = pve, group = 1), color = "black") +
-             geom_point(aes(x = factor(CP, levels = unique(CP)), y = pve), shape = 1, color = "black", size = 2) +
-             labs(title = "Graph of variances explained by the principal components and plot of the cumulative frequency of explained variation",
-                  x = "Principal Components",
-                  y = "Explained Variance") +
-             theme_minimal()
-         })
-         
-         print(acpf_obj$acpf$xiEst)
-         
-         # PlotContribIndividu
-         # data_contrib <- data.frame(name = c(colnames(as.data.frame(acpf_obj$acpf$xiEst))),
-         #                            value = acpf_obj$acpf$xiEst[indivPlot2,])
-         data_contrib <- data.frame(name = paste0("CP", seq_len(ncol(acpf_obj$acpf$xiEst))),
-                                    value = acpf_obj$acpf$xiEst[indivPlot2,])
-         
-         print(data_contrib)
-         data_contrib <- data_contrib[1:acpf_obj$acpf$selectK,]
-         
-         output$plot_contrib_individu <- renderPlot({
-           ggplot(data_contrib, aes(x = name, y = value)) +
-             geom_bar(stat = "identity",
-                      color = "grey",
-                      fill = "lightblue") +
-             coord_cartesian(ylim = c(min(acpf_obj$acpf$xiEst[,]), max(acpf_obj$acpf$xiEst[,])), # min and max based on the general min and max
-                             xlim = c(1, acpf_obj$acpf$selectK)) +
-             labs(title = paste("Graph of contributions of each PC to the projection of the individual:", input$id_select_score),
-                  x = "Principal Components", y = "Associated Coefficient") +
-             theme_minimal()
-         })
-      }
+        if (is.null(input$id_select)) {
+          if (lang=="fr"){
+            shinyalert("Erreur", "Aucun individu(s) sélectionné(s) pour le spaghetti plot", type = "error")
+          } else {
+            shinyalert("Error", "No individual(s) selected for the spaghetti plot", type = "error")
+          }
+        } else {
+          if (is.null(input$id_select_score)) {
+            if (lang=="fr"){
+              shinyalert("Erreur", "Aucun individu sélectionné pour le calcul des estimation individuelles", type = "error")
+            } else {
+              shinyalert("Error", "No individual selected for the individual estimation", type = "error")
+            }
+          } else {
+            if (input$choix==1){
+              nbcp <- input$nbCP
+              if (nbcp<1 && nbcp>20){
+                if (lang=="fr"){
+                  shinyalert("Erreur", "Le nombre de composante principale doit être compris entre 1 et 20", type = "error")
+                } else {
+                  shinyalert("Error", "The number of principal components must be between 1 and 20", type = "error")
+                }
+              } else {
+                acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = obsMin, methode=nbcp)
+              }
+            } else {
+              nb_threshold = input$PVE * 0.01
+              if (nb_threshold<50 && nb_threshold>100){
+                if (lang=="fr"){
+                  shinyalert("Erreur", "Le pourcentage de variance expliquée doit être compris entre 50 et 100 %", type = "error")
+                } else {
+                  shinyalert("Error", "The percentage of variance explained must be between 50 and 100%.", type = "error")
+                }
+              } else {
+                acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = obsMin, threshold = nb_threshold)
+              }
+            }
+            
+            
+            
+            
+            
+            
+            if (lang == "fr"){
+              #SpaghettiPlot
+              idSelect <- input$id_select
+              data_spag <- data_spag %>% filter(.data[[idVar]] %in% idSelect)
+              output$plot_spag <- renderPlot({
+                ggplot(data_spag, aes(x=.data[[timeVar]],y=.data[[acpfVar]], group=.data[[idVar]], color = .data[[idVar]])) +
+                  geom_line() +
+                  labs(title = paste("SpaghettiPlot représentant", acpfVar, "chez les individus sélectionnés"),
+                       x = "Temps",
+                       y = acpfVar,
+                       color="Individus") +
+                  guides(color = F) +
+                  theme_minimal()
+              })
+              
+              # MuPlot
+              acpf_mu_df <- as.data.frame(acpf_obj$acpf$mu) %>% rename(mu = 'acpf_obj$acpf$mu')
+              acpf_mu_df <- acpf_mu_df %>% mutate(temps =acpf_obj$acpf$workGrid) #mutate(temps = seq(1, n(), 1))
+              output$plot_mu <- renderPlot({
+                ggplot(acpf_mu_df, aes(x = temps, y = mu)) +
+                  geom_line() +
+                  labs(title = "Fonction moyenne de l'ACPF sur l'ensemble des individus", 
+                       x = "Temps", y="Moyenne") +
+                  theme_minimal()
+              })
+              
+              
+              # ScorePlot
+              scores <- acpf_obj$acpf$xiEst %*% t(acpf_obj$acpf$phi) + matrix(rep(acpf_obj$acpf$mu, times = length(acpf_obj$data_obs)), nrow = length(acpf_obj$data_obs), byrow = TRUE)
+              
+              # Récuperer la liste des identifiants selon le type de jeu de données
+              # Leur attribuer un index
+              
+              if (IsRegular(data())!="Sparse"){
+                liste_id <- sort(unique(data()[[idVar]]))
+                # print("Non sparse")
+                
+                liste_id_df <- data.frame(id = liste_id)
+                liste_id_df <- liste_id_df %>% mutate(index = seq(1, n(), 1))
+                
+                indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
+                indivPlot <- indivPlotdf$index
+                # print(indivPlot)
+                # print(class(indivPlot))
+              } else {
+                # print("sparse")
+                
+                data_index <- data_frame(id = sort(unique(data()[[idVar]])))
+                data_index <- data_index %>% mutate(index = seq(1, n(), 1))
+                data_estim <- data.frame(id = data()[[input$id]], temps = data()[[input$time]]) %>% mutate(variable = data()[[input$variable_acpf]])
+                data_estim <- left_join(data_estim, data_index)
+                data_estim <- data_estim %>% group_by(id) %>% filter(all(sum(!is.na(variable)) >= input$nbInput))
+                liste_id_df <- data_estim %>% dplyr::select(id, index) %>% distinct(id, index ,.keep_all = TRUE)
+                
+                indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
+                indivPlot <- indivPlotdf$index
+              }
+              
+              # Prendre les t tels que Y(t) soit non manquant
+              if (is.numeric(indivPlotdf$id)==T){
+                indivPlotStr <- as.character(indivPlot)
+              } else {
+                indivPlotStr <- indivPlotdf$id
+              }
+              dfObs <- data.frame(acpf_obj$acpf$inputData$Ly[[indivPlotStr]], acpf_obj$acpf$inputData$Lt[[indivPlotStr]])
+              names(dfObs)[1] <- "Obs"
+              names(dfObs)[2] <- "Time"
+              
+              # debug <- data.frame(id = data()[[input$id]], variable = data()[[input$variable_acpf]], time = data()[[input$time]])
+              # if (IsRegular(data())!="Sparse"){
+              #   debug <- debug %>% filter(id == indivPlotdf$id)
+              # } else {
+              #   debug <- debug %>% filter(id == indivPlotdf$id)
+              # }
+              # print(debug)
+              # 
+              # print(acpf_obj$acpf$inputData$Ly[[indivPlotStr]])
+              
+              # Prendre les scores de l'individu selectionné
+              indivSelect <- data.frame(id = data()[[input$id]])
+              indivSelect <- indivSelect %>% filter(id %in% input$id_select) 
+              indivSelect_id <- sort(unique(indivSelect$id))
+              newIndex <- data.frame(id = indivSelect_id) %>% mutate(index = seq(1, n(), 1))
+              newIndex <- newIndex %>% filter(id==input$id_select_score)
+              indivPlot2 <- newIndex$index
+              if (is.numeric(newIndex$id)==T){
+                indivPlotStr2 <- as.character(indivPlot2)
+              } else {
+                indivPlotStr2 <- newIndex$index
+              }
+              
+              indivScore2 <- scores[as.numeric(indivPlotStr2),]
+              indivScore_df2 <- as.data.frame(indivScore2)
+              temps_score_df2 <- acpf_obj$acpf$workGrid
+              indivScore_df2 <- indivScore_df2 %>% mutate(temps = temps_score_df2)
+              
+              idSelectScore <- input$id_select_score
+              
+              # Plot en fonction du type de point choisi
+              if (input$typeTrace == "etoiles"){
+                output$plot_score <- renderPlot({
+                  ggplot(indivScore_df2, aes(x = temps, y = indivScore2)) +
+                    geom_line() +
+                    geom_point(data = dfObs, aes(x = Time, y = Obs), color = "red", shape=4, size = 1) +
+                    labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", idSelectScore, "\net ses valeurs observées"),
+                         x = "Temps", y = acpfVar) +
+                    theme_minimal()
+                })
+              } else {
+                output$plot_score <- renderPlot({
+                  ggplot(indivScore_df2, aes(x = temps, y = indivScore2)) +
+                    geom_line() +
+                    geom_line(data = dfObs, aes(x = Time, y = Obs), color = "red") +
+                    labs(title = paste("Graph des estimations individuelles de la fonction de l'individu", idSelectScore, "\net valeurs observées"),
+                         x = "Temps", y = acpfVar) +
+                    theme_minimal()
+                })
+              }
+              
+              
+              
+              # PhiPlot
+              # Chercher les valeurs minimum de l'acpf avec paramètres par défaut
+              acpf_ylim <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar)
+              min_y<-min(acpf_ylim$acpf$phi)
+              max_y<-max(acpf_ylim$acpf$phi)
+              
+              # Stocker les valeurs des composantes principales de l'acpf calculée
+              phi <- acpf_obj$acpf$phi
+              colnames(phi) <-1:ncol(phi)
+              phi <- cbind("temps"=1:nrow(phi),phi)
+              phi <- as.data.frame(phi)
+              
+              if (input$choix==1){
+                phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:(as.numeric(nbcp)+1)], names_to = "CP", values_to = "Valeurs")
+                output$plot_phi <- renderPlot({
+                  ggplot(phi_pivoter, aes(x=temps ,y=Valeurs, group=CP, color = CP)) +
+                    geom_line() +
+                    labs(title ="Diagramme représentant les composantes principales",
+                         x = "Temps",
+                         y = paste("Variation de ", input$variable_acpf),
+                         color="CP",
+                         caption=paste("Le pourcentage de variance expliquée est de ", round(acpf_obj$acpf$FVE*100,2), "%.")) +
+                    ylim(min_y,max_y)+
+                    theme_minimal()
+                  # theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5), plot.caption = element_text(size = 13, hjust =0))
+                })
+              } else {
+                phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:ncol(phi)], names_to = "CP", values_to = "Valeurs")
+                output$plot_phi <- renderPlot({
+                  ggplot(phi_pivoter, aes(x=temps ,y=Valeurs, group=CP, color = CP)) +
+                    geom_line() +
+                    labs(title = paste("Diagramme représentant les composantes principales"),
+                         x = "Temps",
+                         y = paste("Variation de ", input$variable_acpf),
+                         color="CP") +
+                    ylim(min_y,max_y)+
+                    theme_minimal()
+                  # theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
+                })
+              }
+              
+              # PlotVarExpPVE
+              variances_expliquee <- as.data.frame(acpf_obj$acpf$lambda/sum(acpf_obj$acpf$lambda))
+              names(variances_expliquee)[1] <- "varExp"
+              pve <- as.data.frame(acpf_obj$acpf$cumFVE)
+              names(pve)[1] <- "pve"
+              composante <- as.data.frame(row.names(variances_expliquee))
+              names(composante)[1] <- "CP"
+              df_varExp_PVE <- cbind(composante, variances_expliquee, pve)
+              head(df_varExp_PVE)
+              
+              output$plot_varExpPVE <- renderPlot({
+                ggplot(df_varExp_PVE, aes(x = factor(CP, levels = unique(CP)), y = varExp)) +
+                  geom_bar(stat = "identity", fill="lightblue") +
+                  geom_line(aes(x = factor(CP, levels = unique(CP)), y = pve, group=1), color = "black") +
+                  geom_point(aes(x = factor(CP, levels = unique(CP)), y = pve), shape=1, color = "black", size = 2) +
+                  labs(title = "Graph des variances expliquées par les composantes principales et tracé de la fréquence cumulée de variation expliquée",
+                       x = "Composantes principales",
+                       y = "Variance expliquée") +
+                  theme_minimal()
+              })
+              
+              # PlotContribIndividu
+              data_contrib <- data.frame(name = paste0("CP", seq_len(ncol(acpf_obj$acpf$xiEst))),
+                                         value = acpf_obj$acpf$xiEst[indivPlot2,])
+              data_contrib <- data_contrib[1:acpf_obj$acpf$selectK,]
+              
+              output$plot_contrib_individu <- renderPlot ({
+                ggplot(data_contrib, aes(x=name, y=value)) +
+                  geom_bar(stat = "identity",
+                           color = "grey",
+                           fill = "lightblue") +
+                  
+                  coord_cartesian(ylim = c(min(acpf_obj$acpf$xiEst[,]),max(acpf_obj$acpf$xiEst[,])),#min et max en fonction du min et du max général
+                                  xlim = c(1,acpf_obj$acpf$selectK)) +
+                  labs(title = paste("Graph des contributions de chaque CP à la projection de l'individu :", idSelectScore),
+                       x = "Composantes principales", y = "Coefficient associé") +
+                  theme_minimal()
+              })
+            } else {
+              #SpaghettiPlot
+              idSelect <- input$id_select
+              data_spag <- data_spag %>% filter(.data[[idVar]] %in% idSelect)
+              output$plot_spag <- renderPlot({
+                ggplot(data_spag, aes(x=.data[[timeVar]], y=.data[[acpfVar]], group=.data[[idVar]], color = .data[[idVar]])) +
+                  geom_line() +
+                  labs(title = paste("SpaghettiPlot representing", acpfVar, "among selected individuals"),
+                       x = "Time",
+                       y = acpfVar,
+                       color = "Individuals") +
+                  guides(color = FALSE) +
+                  theme_minimal()
+              })
+              
+              # MuPlot
+              acpf_mu_df <- as.data.frame(acpf_obj$acpf$mu) %>% rename(mu = 'acpf_obj$acpf$mu')
+              acpf_mu_df <- acpf_mu_df %>% mutate(temps =acpf_obj$acpf$workGrid) #mutate(temps = seq(1, n(), 1))
+              output$plot_mu <- renderPlot({
+                ggplot(acpf_mu_df, aes(x = temps, y = mu)) +
+                  geom_line() +
+                  labs(title = "Mean function of ACPF across all individuals",
+                       x = "Time", y = "Mean") +
+                  theme_minimal()
+              })
+              
+              
+              # ScorePlot
+              scores <- acpf_obj$acpf$xiEst %*% t(acpf_obj$acpf$phi) + matrix(rep(acpf_obj$acpf$mu, times = length(acpf_obj$data_obs)), nrow = length(acpf_obj$data_obs), byrow = TRUE)
+              
+              # Récuperer la liste des identifiants selon le type de jeu de données
+              # Leur attribuer un index
+              
+              if (IsRegular(data())!="Sparse"){
+                liste_id <- sort(unique(data()[[idVar]]))
+                # print("Non sparse")
+                
+                liste_id_df <- data.frame(id = liste_id)
+                liste_id_df <- liste_id_df %>% mutate(index = seq(1, n(), 1))
+                
+                indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
+                indivPlot <- indivPlotdf$index
+                # print(indivPlot)
+                # print(class(indivPlot))
+              } else {
+                # print("sparse")
+                
+                data_index <- data_frame(id = sort(unique(data()[[idVar]])))
+                data_index <- data_index %>% mutate(index = seq(1, n(), 1))
+                data_estim <- data.frame(id = data()[[input$id]], temps = data()[[input$time]]) %>% mutate(variable = data()[[input$variable_acpf]])
+                data_estim <- left_join(data_estim, data_index)
+                data_estim <- data_estim %>% group_by(id) %>% filter(all(sum(!is.na(variable)) >= input$nbInput))
+                liste_id_df <- data_estim %>% dplyr::select(id, index) %>% distinct(id, index ,.keep_all = TRUE)
+                
+                indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
+                indivPlot <- indivPlotdf$index
+              }
+              
+              # Prendre les t tels que Y(t) soit non manquant
+              if (is.numeric(indivPlotdf$id)==T){
+                indivPlotStr <- as.character(indivPlot)
+              } else {
+                indivPlotStr <- indivPlotdf$id
+              }
+              dfObs <- data.frame(acpf_obj$acpf$inputData$Ly[[indivPlotStr]], acpf_obj$acpf$inputData$Lt[[indivPlotStr]])
+              names(dfObs)[1] <- "Obs"
+              names(dfObs)[2] <- "Time"
+              
+              # debug <- data.frame(id = data()[[input$id]], variable = data()[[input$variable_acpf]], time = data()[[input$time]])
+              # if (IsRegular(data())!="Sparse"){
+              #   debug <- debug %>% filter(id == indivPlotdf$id)
+              # } else {
+              #   debug <- debug %>% filter(id == indivPlotdf$id)
+              # }
+              # print(debug)
+              # 
+              # print(acpf_obj$acpf$inputData$Ly[[indivPlotStr]])
+              
+              # Prendre les scores de l'individu selectionné
+              indivSelect <- data.frame(id = data()[[input$id]])
+              indivSelect <- indivSelect %>% filter(id %in% input$id_select) 
+              indivSelect_id <- sort(unique(indivSelect$id))
+              newIndex <- data.frame(id = indivSelect_id) %>% mutate(index = seq(1, n(), 1))
+              newIndex <- newIndex %>% filter(id==input$id_select_score)
+              indivPlot2 <- newIndex$index
+              if (is.numeric(newIndex$id)==T){
+                indivPlotStr2 <- as.character(indivPlot2)
+              } else {
+                indivPlotStr2 <- newIndex$index
+              }
+              
+              indivScore2 <- scores[as.numeric(indivPlotStr2),]
+              indivScore_df2 <- as.data.frame(indivScore2)
+              temps_score_df2 <- acpf_obj$acpf$workGrid
+              indivScore_df2 <- indivScore_df2 %>% mutate(temps = temps_score_df2)
+              
+              idSelectScore <- input$id_select_score
+              
+              # Plot en fonction du type de point choisi
+              if (input$typeTrace == "etoiles") {
+                output$plot_score <- renderPlot({
+                  ggplot(indivScore_df2, aes(x = temps, y = indivScore2)) +
+                    geom_line() +
+                    geom_point(data = dfObs, aes(x = Time, y = Obs), color = "red", shape=4, size = 1) +
+                    labs(title = paste("Graph of individual estimates of the function of individual", idSelectScore, "\nand its observed values"),
+                         x = "Time", y = acpfVar) +
+                    theme_minimal()
+                })
+              } else {
+                output$plot_score <- renderPlot({
+                  ggplot(indivScore_df2, aes(x = temps, y = indivScore2)) +
+                    geom_line() +
+                    geom_line(data = dfObs, aes(x = Time, y = Obs), color = "red") +
+                    labs(title = paste("Graph of individual estimates of the function of individual", idSelectScore, "\nand observed values"),
+                         x = "Time", y = acpfVar) +
+                    theme_minimal()
+                })
+              }
+              
+              
+              
+              # PhiPlot
+              # Chercher les valeurs minimum de l'acpf avec paramètres par défaut
+              acpf_ylim <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar)
+              min_y<-min(acpf_ylim$acpf$phi)
+              max_y<-max(acpf_ylim$acpf$phi)
+              
+              # Stocker les valeurs des composantes principales de l'acpf calculée
+              phi <- acpf_obj$acpf$phi
+              colnames(phi) <-1:ncol(phi)
+              phi <- cbind("temps"=1:nrow(phi),phi)
+              phi <- as.data.frame(phi)
+              
+              if (input$choix==1){
+                phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:(as.numeric(nbcp)+1)], names_to = "CP", values_to = "Valeurs")
+                output$plot_phi <- renderPlot({
+                  ggplot(phi_pivoter, aes(x = temps, y = Valeurs, group = CP, color = CP)) +
+                    geom_line() +
+                    labs(title = "Diagram representing the principal components",
+                         x = "Time",
+                         y = paste("Variation of", input$variable_acpf),
+                         color = "CP",
+                         caption = paste("The percentage of explained variance is", round(acpf_obj$acpf$FVE * 100, 2), "%.")) +
+                    ylim(min_y, max_y) +
+                    theme_minimal()
+                })
+              } else {
+                phi_pivoter<- pivot_longer(phi, cols = colnames(phi)[2:ncol(phi)], names_to = "CP", values_to = "Valeurs")
+                output$plot_phi <- renderPlot({
+                  ggplot(phi_pivoter, aes(x=temps ,y=Valeurs, group=CP, color = CP)) +
+                    geom_line() +
+                    labs(title = paste("Diagram representing the principal components"),
+                         x = "Time",
+                         y = paste("Variation of ", input$variable_acpf),
+                         color="CP") +
+                    ylim(min_y,max_y)+
+                    theme_minimal()
+                  # theme(plot.title = element_text(size = 14, face = "bold", hjust = 0.5))
+                })
+              }
+              
+              # PlotVarExpPVE
+              variances_expliquee <- as.data.frame(acpf_obj$acpf$lambda/sum(acpf_obj$acpf$lambda))
+              names(variances_expliquee)[1] <- "varExp"
+              pve <- as.data.frame(acpf_obj$acpf$cumFVE)
+              names(pve)[1] <- "pve"
+              composante <- as.data.frame(row.names(variances_expliquee))
+              names(composante)[1] <- "CP"
+              df_varExp_PVE <- cbind(composante, variances_expliquee, pve)
+              head(df_varExp_PVE)
+              
+              output$plot_varExpPVE <- renderPlot({
+                ggplot(df_varExp_PVE, aes(x = factor(CP, levels = unique(CP)), y = varExp)) +
+                  geom_bar(stat = "identity", fill = "lightblue") +
+                  geom_line(aes(x = factor(CP, levels = unique(CP)), y = pve, group = 1), color = "black") +
+                  geom_point(aes(x = factor(CP, levels = unique(CP)), y = pve), shape = 1, color = "black", size = 2) +
+                  labs(title = "Graph of variances explained by the principal components and plot of the cumulative frequency of explained variation",
+                       x = "Principal Components",
+                       y = "Explained Variance") +
+                  theme_minimal()
+              })
+              
+              # PlotContribIndividu
+              # data_contrib <- data.frame(name = c(colnames(as.data.frame(acpf_obj$acpf$xiEst))),
+              #                            value = acpf_obj$acpf$xiEst[indivPlot2,])
+              data_contrib <- data.frame(name = paste0("CP", seq_len(ncol(acpf_obj$acpf$xiEst))),
+                                         value = acpf_obj$acpf$xiEst[indivPlot2,])
+              data_contrib <- data_contrib[1:acpf_obj$acpf$selectK,]
+              
+              output$plot_contrib_individu <- renderPlot({
+                ggplot(data_contrib, aes(x = name, y = value)) +
+                  geom_bar(stat = "identity",
+                           color = "grey",
+                           fill = "lightblue") +
+                  coord_cartesian(ylim = c(min(acpf_obj$acpf$xiEst[,]), max(acpf_obj$acpf$xiEst[,])), # min and max based on the general min and max
+                                  xlim = c(1, acpf_obj$acpf$selectK)) +
+                  labs(title = paste("Graph of contributions of each PC to the projection of the individual:", idSelectScore),
+                       x = "Principal Components", y = "Associated Coefficient") +
+                  theme_minimal()
+              })
+            }
+          }
+          }
+        }
+        
     })
   }
   
