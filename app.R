@@ -309,9 +309,7 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
     
     output$dataframe <- renderDataTable({
       data()
-    },
-    options = list(
-      dom = 'Blfrtip'))
+    })
 
     # modifie l'input variable
     observe({
@@ -371,7 +369,6 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
               
               observe({
                 updateSelectInput(session, "id_select", choices = c(all="all",none="none",id_select), selected = ind)
-                updateSelectInput(session, "id_select", choices = c(tous="all",aucun="none",id_select), selected = ind)
                 # updateSelectInput(session, "id_select", choices = id_select) #, selected = id_select[1])
                 updateSelectInput(session, "id_select_score", choices = id_select)
               })
