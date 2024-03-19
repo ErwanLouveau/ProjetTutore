@@ -370,7 +370,11 @@ acpf <- function(data, variable, id="id", time="year", obs_min = 2, threshold = 
               
               
               observe({
+<<<<<<< HEAD
                 updateSelectInput(session, "id_select", choices = c(all="all",none="none",id_select), selected = ind)
+=======
+                updateSelectInput(session, "id_select", choices = c(tous="all",aucun="none",id_select), selected = ind)
+>>>>>>> 2ad6275249e0694e5c6310dfa2ad47a41f31d3cb
                 # updateSelectInput(session, "id_select", choices = id_select) #, selected = id_select[1])
                 updateSelectInput(session, "id_select_score", choices = id_select)
               })
