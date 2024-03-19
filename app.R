@@ -287,9 +287,6 @@ language <- reactiveVal("fr")  # Par défaut, la langue est le français
       }
     })
     
-    
-    
-    # créer un jeu de données réactive
     data <- reactive({
       lang <- language()
       file <- input$file1
@@ -307,9 +304,9 @@ language <- reactiveVal("fr")  # Par défaut, la langue est le français
             pivot_longer(!colnames(donnees[1]), names_to = "ID", values_to = "Values")
         }
       }
-      etatInitial(FALSE)
+      return(donnees)
     })
-    
+
     
     output$dataframe <- renderDataTable({
       data()
@@ -491,6 +488,8 @@ language <- reactiveVal("fr")  # Par défaut, la langue est le français
       idVar <- input$id
       timeVar <- input$time
       obsMin <- input$nbInput
+      nbcp <- input$nbCP
+      nb_threshold <- input$PVE * 0.01
       
       
       if (!is.numeric(data_acpf[[timeVar]]) && !is.integer(data_acpf[[timeVar]]) && !is.factor(data_acpf[[timeVar]])){
@@ -523,8 +522,9 @@ language <- reactiveVal("fr")  # Par défaut, la langue est le français
                 }
               } else {
                 if (input$choix==1){
-                  nbcp <- input$nbCP
-                  if (nbcp<1 && nbcp>20){
+                  # nbcp <- input$nbCP
+                  # print(input$nbCP)
+                  if (input$nbCP<1 | input$nbCP>20){
                     if (lang=="fr"){
                       shinyalert("Erreur", "Le nombre de composante principale doit être compris entre 1 et 20", type = "error")
                     } else {
@@ -534,8 +534,9 @@ language <- reactiveVal("fr")  # Par défaut, la langue est le français
                     acpf_obj <- acpf(data_acpf, acpfVar, id=idVar, time=timeVar, obs_min = obsMin, methode=nbcp)
                   }
                 } else {
-                  nb_threshold = input$PVE * 0.01
-                  if (nb_threshold<50 && nb_threshold>100){
+                  # nb_threshold = input$PVE * 0.01
+                  # print(nb_threshold)
+                  if (nb_threshold<0.50 | nb_threshold>1){
                     if (lang=="fr"){
                       shinyalert("Erreur", "Le pourcentage de variance expliquée doit être compris entre 50 et 100 %", type = "error")
                     } else {
@@ -547,7 +548,9 @@ language <- reactiveVal("fr")  # Par défaut, la langue est le français
                 }
                 
                 
-                
+                if (!exists("acpf_obj")) {
+                  return()  # Si l'objet n'existe pas, arrêter l'observation
+                }
                 
                 
                 
@@ -580,22 +583,18 @@ language <- reactiveVal("fr")  # Par défaut, la langue est le français
                   
                   # ScorePlot
                   scores <- acpf_obj$acpf$xiEst %*% t(acpf_obj$acpf$phi) + matrix(rep(acpf_obj$acpf$mu, times = length(acpf_obj$data_obs)), nrow = length(acpf_obj$data_obs), byrow = TRUE)
-                  
+                  # print(scores)
                   # Récuperer la liste des identifiants selon le type de jeu de données
                   # Leur attribuer un index
                   
                   if (IsRegular(data())!="Sparse"){
                     liste_id <- sort(unique(data()[[idVar]]))
-                    # print(liste_id)
-                    # print("Non sparse")
                     
                     liste_id_df <- data.frame(id = liste_id)
                     liste_id_df <- liste_id_df %>% mutate(index = seq(1, n(), 1))
-                    # print(liste_id_df)
                     
                     indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
                     indivPlot <- indivPlotdf$index
-                    # print(indivPlot)
                   } else {
                     # print("sparse")
                     
@@ -604,7 +603,8 @@ language <- reactiveVal("fr")  # Par défaut, la langue est le français
                     data_estim <- data.frame(id = data()[[input$id]], temps = data()[[input$time]]) %>% mutate(variable = data()[[input$variable_acpf]])
                     data_estim <- left_join(data_estim, data_index)
                     data_estim <- data_estim %>% group_by(id) %>% filter(all(sum(!is.na(variable)) >= input$nbInput))
-                    liste_id_df <- data_estim %>% dplyr::select(id, index) %>% distinct(id, index ,.keep_all = TRUE)
+                    liste_id_df <- data_estim %>% dplyr::select(id, index) %>% distinct(id, index ,.keep_all = TRUE) 
+                    liste_id_df<- as.data.frame(liste_id_df) %>% mutate(index2 = row_number())
                     
                     indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
                     indivPlot <- indivPlotdf$index
@@ -619,42 +619,37 @@ language <- reactiveVal("fr")  # Par défaut, la langue est le français
                   dfObs <- data.frame(acpf_obj$acpf$inputData$Ly[[indivPlotStr]], acpf_obj$acpf$inputData$Lt[[indivPlotStr]])
                   names(dfObs)[1] <- "Obs"
                   names(dfObs)[2] <- "Time"
+                  # print(dfObs)
                   
-                  # debug <- data.frame(id = data()[[input$id]], variable = data()[[input$variable_acpf]], time = data()[[input$time]])
-                  # if (IsRegular(data())!="Sparse"){
-                  #   debug <- debug %>% filter(id == indivPlotdf$id)
-                  # } else {
-                  #   debug <- debug %>% filter(id == indivPlotdf$id)
-                  # }
-                  # print(debug)
-                  # 
-                  # print(acpf_obj$acpf$inputData$Ly[[indivPlotStr]])
                   
                   # Prendre les scores de l'individu selectionné
                   indivSelect <- data.frame(id = data()[[input$id]])
-                  if (is.numeric(indivSelect$id)){
-                    indivSelect <- indivSelect %>% filter(id %in% input$id_select)
-                    indivSelect_id <- sort(unique(indivSelect$id))
-                    newIndex <- data.frame(id = indivSelect_id) %>% mutate(index = seq(1, n(), 1))
-                    newIndex <- newIndex %>% filter(id==input$id_select_score)
-                    indivPlot2 <- newIndex$index
+                  if (IsRegular(data())=="Sparse"){
+                    indivPlot2 <- indivPlotdf$index2
+                    print(indivPlot2)
                     indivPlotStr2 <- as.character(indivPlot2)
+                    print(indivPlotStr2)
                     indivScore2 <- scores[as.numeric(indivPlotStr2),]
+                    print(indivScore2)
+                    # indivSelect <- indivSelect %>% filter(id %in% input$id_select)
+                    # print(indivSelect)
+                    # indivSelect_id <- sort(unique(indivSelect$id))
+                    # print(indivSelect_id)
+                    # newIndex <- data.frame(id = indivSelect_id) %>% mutate(index = seq(1, n(), 1))
+                    # print(newIndex)
+                    # newIndex <- newIndex %>% filter(id==input$id_select_score)
+                    # print(newIndex)
+                    # indivPlot2 <- newIndex$index
+                    # print(indivPlot2)
+                    # indivPlotStr2 <- as.character(indivPlot2)
+                    # print(indivPlotStr2)
+                    # indivScore2 <- scores[as.numeric(indivPlotStr2),]
+                    # print(indivScore2)
                   } else {
                     indivPlot2 <- indivPlot
                     indivPlotStr2 <- as.character(indivPlot2)
                     indivScore2 <- scores[as.numeric(indivPlotStr2),]
                   }
-                  
-                  
-                  # print(indivSelect_id)
-                  # indivPlot2 <- newIndex$index
-                  # if (is.numeric(newIndex$id)==T){
-                  #   indivPlotStr2 <- as.character(indivPlot2)
-                  # } else {
-                  #   indivPlotStr2 <- newIndex$index
-                  # }
-                  
                   
                   indivScore_df2 <- as.data.frame(indivScore2)
                   temps_score_df2 <- acpf_obj$acpf$workGrid
@@ -808,8 +803,6 @@ language <- reactiveVal("fr")  # Par défaut, la langue est le français
                     
                     indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
                     indivPlot <- indivPlotdf$index
-                    # print(indivPlot)
-                    # print(class(indivPlot))
                   } else {
                     # print("sparse")
                     
@@ -819,6 +812,7 @@ language <- reactiveVal("fr")  # Par défaut, la langue est le français
                     data_estim <- left_join(data_estim, data_index)
                     data_estim <- data_estim %>% group_by(id) %>% filter(all(sum(!is.na(variable)) >= input$nbInput))
                     liste_id_df <- data_estim %>% dplyr::select(id, index) %>% distinct(id, index ,.keep_all = TRUE)
+                    liste_id_df<- as.data.frame(liste_id_df) %>% mutate(index2 = row_number())
                     
                     indivPlotdf <- liste_id_df %>% filter(id==input$id_select_score)
                     indivPlot <- indivPlotdf$index
@@ -846,14 +840,13 @@ language <- reactiveVal("fr")  # Par défaut, la langue est le français
                   
                   # Prendre les scores de l'individu selectionné
                   indivSelect <- data.frame(id = data()[[input$id]])
-                  if (is.numeric(indivSelect$id)){
-                    indivSelect <- indivSelect %>% filter(id %in% input$id_select)
-                    indivSelect_id <- sort(unique(indivSelect$id))
-                    newIndex <- data.frame(id = indivSelect_id) %>% mutate(index = seq(1, n(), 1))
-                    newIndex <- newIndex %>% filter(id==input$id_select_score)
-                    indivPlot2 <- newIndex$index
+                  if (IsRegular(data())=="Sparse"){
+                    indivPlot2 <- indivPlotdf$index2
+                    print(indivPlot2)
                     indivPlotStr2 <- as.character(indivPlot2)
+                    print(indivPlotStr2)
                     indivScore2 <- scores[as.numeric(indivPlotStr2),]
+                    print(indivScore2)
                   } else {
                     indivPlot2 <- indivPlot
                     indivPlotStr2 <- as.character(indivPlot2)
