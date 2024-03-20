@@ -18,6 +18,16 @@
   display: block;
 }
 
+.custom_icon3 {
+  background: url("Gwenn_ha_du.svg");
+  background-size: contain;
+  background-position: center;
+  background-repeat: no-repeat;
+  height: 32px;
+  width: 32px;
+  display: block;
+}
+
 .custom_icon_title {
   background: url("isped.png");
   background-size: contain;
